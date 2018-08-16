@@ -38,6 +38,7 @@ export DictCons(..);
 export keys;
 export values;
 export lookup;
+export filter;
 export insertWith;
 export insertMappend;
 export insert;
@@ -76,6 +77,8 @@ function List#(key_t) keys(`DICT_T d) = map(tpl_1, d.d);
 function List#(value_t) values(`DICT_T d) = map(tpl_2, d.d);
 function Maybe#(value_t) lookup(key_t k, `DICT_T d) provisos (Eq#(key_t)) =
   List::lookup(k, d.d);
+function `DICT_T filter (function Bool f(`DICT_ELEM_T e), `DICT_T d) =
+  dict(List::filter(f, d.d));
 
 // Dictionary insert
 function `DICT_T insertWith_(
