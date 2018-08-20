@@ -114,21 +114,41 @@ endinstance
 // Connectable instances //
 ////////////////////////////////////////////////////////////////////////////////
 
-/*
-instance Connectable#(a#(t), b#(t))
-  provisos (ToGet#(a#(t), t), ToPut#(b#(t), t));
-  module mkConnection#(a#(t) src, b#(t) snk)(Empty);
+instance Connectable#(Source#(t), Sink#(t));
+  module mkConnection#(Source#(t) src, Sink#(t) snk)(Empty);
     mkConnection(toGet(src), toPut(snk));
   endmodule
 endinstance
 
-instance Connectable#(a#(t), b#(t))
-  provisos (ToPut#(a#(t), t), ToGet#(b#(t), t));
-  module mkConnection#(a#(t) snk, b#(t) src)(Empty);
+instance Connectable#(Sink#(t), Source#(t));
+  module mkConnection#(Sink#(t) snk, Source#(t) src)(Empty);
     mkConnection(toGet(src), toPut(snk));
   endmodule
 endinstance
-*/
+
+instance Connectable#(Source#(t), Put#(t));
+  module mkConnection#(Source#(t) src, Put#(t) put)(Empty);
+    mkConnection(toGet(src), put);
+  endmodule
+endinstance
+
+instance Connectable#(Put#(t), Source#(t));
+  module mkConnection#(Put#(t) put, Source#(t) src)(Empty);
+    mkConnection(toGet(src), put);
+  endmodule
+endinstance
+
+instance Connectable#(Sink#(t), Get#(t));
+  module mkConnection#(Sink#(t) snk, Get#(t) get)(Empty);
+    mkConnection(get, toPut(snk));
+  endmodule
+endinstance
+
+instance Connectable#(Get#(t), Sink#(t));
+  module mkConnection#(Get#(t) get, Sink#(t) snk)(Empty);
+    mkConnection(get, toPut(snk));
+  endmodule
+endinstance
 
 ///////////
 // Shims //
