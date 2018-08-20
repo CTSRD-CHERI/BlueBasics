@@ -32,10 +32,12 @@ import Monoid :: *;
 import MkList :: *;
 import Dict :: *;
 import Virtualizable :: *;
+import SourceSink :: *;
 
 export Monoid :: *;
 export MkList :: *;
 export Dict :: *;
 export Virtualizable :: *;
+export SourceSink :: *;
 
 endpackage
