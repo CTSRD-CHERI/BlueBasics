@@ -29,13 +29,13 @@
 package BlueBasics;
 
 import Monoid :: *;
-import MkList :: *;
+import ListExtra :: *;
 import Dict :: *;
 import Virtualizable :: *;
 import SourceSink :: *;
 
 export Monoid :: *;
-export MkList :: *;
+export ListExtra :: *;
 export Dict :: *;
 export Virtualizable :: *;
 export SourceSink :: *;

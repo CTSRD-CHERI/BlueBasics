@@ -26,9 +26,22 @@
  * @BERI_LICENSE_HEADER_END@
  */
 
-package MkList;
+package ListExtra;
+
+import Printf :: *;
 
 import List :: *;
+export List :: *;
+
+export list;
+export splitAt;
+export concatMap;
+export rotateBy;
+export rotateRBy;
+export oneHotRotateBy;
+export oneHotRotateRBy;
+export firstHotToOneHot;
+export findOneHotWith;
 
 // Nice friendly list constructor lifted from Bluecheck's sources:
 // https://github.com/CTSRD-CHERI/bluecheck.git
@@ -49,5 +62,49 @@ endinstance
 function a list() provisos (MkList#(a, b));
   return mkList(Nil);
 endfunction
+
+// basic utility functions
+
+function Tuple2#(List#(a), List#(a)) splitAt(Integer n, List#(a) xs) =
+  tuple2(take(n, xs), drop(n, xs));
+
+function List#(a) concatMap(function List#(a) f(a x), List#(a) xs) =
+  concat(map(f, xs));
+
+function List#(a) rotateBy(Integer n, List#(a) xs) =
+  append(drop(n, xs), take(n, xs));
+
+function List#(a) rotateRBy(Integer n, List#(a) xs) =
+  reverse(rotateBy(n, reverse(xs)));
+
+function List#(a) oneHotRotateBy(List#(Bool) xs, List#(a) ys)
+  provisos (Bits#(a, a_sz));
+  Integer n = length(xs);
+  List#(a) outList = Nil;
+  for (Integer i = 0; i < n; i = i + 1) begin
+    xs = rotateR(xs);
+    outList = cons(oneHotSelect(xs, ys), outList);
+  end
+  return reverse(outList);
+endfunction
+
+function List#(a) oneHotRotateRBy(List#(Bool) xs, List#(a) ys)
+  provisos (Bits#(a, a_sz)) = reverse(oneHotRotateBy(xs, reverse(ys)));
+
+function Maybe#(List#(Bool)) firstHotToOneHot(List#(Bool) xs);
+  List#(Bool) outList = Nil;
+  Bool found = False;
+  Integer n = length(xs);
+  for (Integer i = 0; i < n; i = i + 1) begin
+    Bool elem = head(xs);
+    xs = tail(xs);
+    outList = cons((!found) ? elem : False, outList);
+    if (elem) found = True;
+  end
+  return (found) ? Valid(reverse(outList)) : Invalid;
+endfunction
+
+function Maybe#(List#(Bool)) findOneHotWith(function Bool p(t x), List#(t) xs) =
+  firstHotToOneHot(map(p, xs));
 
 endpackage
