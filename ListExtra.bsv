@@ -38,6 +38,7 @@ export splitAt;
 export concatMap;
 export rotateBy;
 export rotateRBy;
+export bitToList;
 export oneHotRotateBy;
 export oneHotRotateRBy;
 export firstHotToOneHot;
@@ -76,6 +77,13 @@ function List#(a) rotateBy(Integer n, List#(a) xs) =
 
 function List#(a) rotateRBy(Integer n, List#(a) xs) =
   reverse(rotateBy(n, reverse(xs)));
+
+function List#(Bool) bitToList(Bit#(n) x);
+  List#(Bool) outList = Nil;
+  for (Integer i = 0; i < valueOf(n); i = i + 1)
+    outList = cons(unpack(x[i]), outList);
+  return reverse(outList);
+endfunction
 
 function List#(a) oneHotRotateBy(List#(Bool) xs, List#(a) ys)
   provisos (Bits#(a, a_sz));
