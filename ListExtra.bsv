@@ -34,6 +34,7 @@ import List :: *;
 export List :: *;
 
 export list;
+export MkList;
 export splitAt;
 export concatMap;
 export rotateBy;
