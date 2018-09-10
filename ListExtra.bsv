@@ -41,6 +41,7 @@ export rotateBy;
 export rotateRBy;
 export bitToList;
 export listToBit;
+export oneHotList;
 export oneHotRotateBy;
 export oneHotRotateRBy;
 export firstHotToOneHot;
@@ -96,6 +97,9 @@ function Bit#(n) listToBit(List#(Bool) x);
   end
   return outBit;
 endfunction
+
+function List#(Bool) oneHotList(Integer sz, Integer idx) =
+  rotateRBy(idx, cons(True, replicate(sz-1, False)));
 
 function List#(a) oneHotRotateBy(List#(Bool) xs, List#(a) ys)
   provisos (Bits#(a, a_sz));
