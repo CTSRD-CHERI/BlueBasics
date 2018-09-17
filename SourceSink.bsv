@@ -67,8 +67,8 @@ endinstance
 instance ToSource#(FIFOF#(t), t);
   function toSource (ff) = interface Source#(t);
     method canGet = ff.notEmpty;
-    method peek if (ff.notEmpty) = ff.first;
-    method get if (ff.notEmpty) = actionvalue
+    method peek   = ff.first;
+    method get    = actionvalue
       ff.deq; 
       return ff.first;
     endactionvalue;
@@ -88,7 +88,7 @@ endinstance
 instance ToSink#(FIFOF#(t), t);
   function toSink (ff) = interface Sink;
     method canPut = ff.notFull;
-    method put if (ff.notFull) = ff.enq;
+    method put    = ff.enq;
   endinterface;
 endinstance
 
