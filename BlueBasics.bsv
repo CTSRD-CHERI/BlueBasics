@@ -33,11 +33,13 @@ import ListExtra :: *;
 import Dict :: *;
 import Virtualizable :: *;
 import SourceSink :: *;
+import MasterSlave :: *;
 
 export Monoid :: *;
 export ListExtra :: *;
 export Dict :: *;
 export Virtualizable :: *;
 export SourceSink :: *;
+export MasterSlave :: *;
 
 endpackage
