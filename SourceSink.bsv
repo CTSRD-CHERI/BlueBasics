@@ -99,16 +99,30 @@ endinstance
 // ToGet
 instance ToGet#(Source#(t), t);
   function toGet (s) = interface Get;
-    method get = s.get;
+    method get if (s.canGet) = s.get;
   endinterface;
 endinstance
+/* XXX this should really work...
+instance ToGet#(src_t, t) provisos (ToSource#(src_t, t));
+  function toGet (s) = interface Get;
+    method get if (toSource(s).canGet) = toSource(s).get;
+  endinterface;
+endinstance
+*/
 
 //ToPut
 instance ToPut#(Sink#(t), t);
   function toPut (s) = interface Put;
-    method put = s.put;
+    method put if (s.canPut) = s.put;
   endinterface;
 endinstance
+/* XXX this should really work...
+instance ToPut#(snk_t, t) provisos (ToSink#(snk_t, t));
+  function toPut (s) = interface Put;
+    method put if (toSink(s).canPut) = toSink(s).put;
+  endinterface;
+endinstance
+*/
 
 ///////////////////////////
 // Connectable instances //
