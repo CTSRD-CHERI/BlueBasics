@@ -61,10 +61,13 @@ instance Virtualizable#(Reg#(a)) provisos (Bits#(a, a__));
 
 endinstance
 
-// virtualizable instance for Server, with static priority
+// virtualizable instance for Server/Slave, with static priority
+import MasterSlave :: *;
+import SourceSink :: *;
 import ClientServer :: *;
 import GetPut :: *;
 import FIFO :: *;
+import FIFOF :: *;
 import SpecialFIFOs :: *;
 import Printf :: *;
 
@@ -102,10 +105,50 @@ provisos (NeedRsp#(req_t), Bits#(req_t, a__), Bits#(rsp_t, b__));
         endrule
       endrules);
       ifc[i] = interface Server;
-        interface request = interface Put; method put = reqFF.enq; endinterface;
-        interface response = interface Get;
-          method get = actionvalue rspFF.deq; return rspFF.first; endactionvalue;
-        endinterface;
+        interface  request = toPut(reqFF);
+        interface response = toGet(rspFF);
+      endinterface;
+    end
+
+    addRules(ifcRules);
+
+    return ifc;
+
+  endmodule
+endinstance
+
+instance Virtualizable#(Slave#(req_t, rsp_t))
+provisos (NeedRsp#(req_t), Bits#(req_t, a__), Bits#(rsp_t, b__));
+
+  module virtualize#(Slave#(req_t, rsp_t) slave, Integer n)(Array#(Slave#(req_t, rsp_t)));
+
+    `define MAX_IDX_SZ 4
+    if (log2(n) > `MAX_IDX_SZ)
+      error(sprintf("Asked for %0d interfaces, virtualize for Slave can't support more than %0d", n, 2**`MAX_IDX_SZ));
+
+    Slave#(req_t, rsp_t) ifc[n];
+    FIFO#(Bit#(`MAX_IDX_SZ)) ifcIdx <- mkFIFO;
+    Rules ifcRules = emptyRules;
+
+    for (Integer i = 0; i < n; i = i + 1) begin
+      let reqFF <- mkBypassFIFOF;
+      let rspFF <- mkBypassFIFOF;
+      ifcRules = rJoinDescendingUrgency(ifcRules, rules
+        rule doSendReq;
+          reqFF.deq;
+          let req = reqFF.first;
+          slave.sink.put(req);
+          if (needRsp(req)) ifcIdx.enq(fromInteger(i));
+        endrule
+        rule doGetRsp (ifcIdx.first == fromInteger(i));
+          ifcIdx.deq;
+          let rsp <- slave.source.get;
+          rspFF.enq(rsp);
+        endrule
+      endrules);
+      ifc[i] = interface Slave;
+        interface   sink = toSink(reqFF);
+        interface source = toSource(rspFF);
       endinterface;
     end
 
