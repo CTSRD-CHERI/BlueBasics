@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2018 Alexandre Joannou
+ * Copyright (c) 2018-2019 Alexandre Joannou
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -39,16 +39,28 @@ import Connectable :: *;
 
 interface Source#(type t);
    (* always_ready *)
-   method Bool canGet();
-   method t peek();
-   method ActionValue#(t) get();
+   method Bool canPeek;
+   method t peek;
+   method Action drop;
 endinterface
 
 interface Sink#(type t);
    (* always_ready *)
-   method Bool canPut();
+   method Bool canPut;
    method Action put(t val);
 endinterface
+
+//////////////////////
+// HasGet typeclass //
+////////////////////////////////////////////////////////////////////////////////
+
+typeclass HasGet#(type a, type b);
+  function ActionValue#(b) get(a gettable);
+endtypeclass
+
+instance HasGet#(a, b) provisos (ToGet#(a, b));
+  function get(x) = toGet(x).get;
+endinstance
 
 ///////////////////////////////////
 // ToSource / ToSink typeclasses //
@@ -66,12 +78,9 @@ endinstance
 
 instance ToSource#(FIFOF#(t), t);
   function toSource (ff) = interface Source#(t);
-    method canGet = ff.notEmpty;
-    method peek   = ff.first;
-    method get    = actionvalue
-      ff.deq; 
-      return ff.first;
-    endactionvalue;
+    method canPeek = ff.notEmpty;
+    method peek    = ff.first;
+    method drop    = ff.deq; 
   endinterface;
 endinstance
 
@@ -99,28 +108,26 @@ endinstance
 // ToGet
 instance ToGet#(Source#(t), t);
   function toGet (s) = interface Get;
-    method get if (s.canGet) = s.get;
+    method get if (s.canPeek) = actionvalue
+      s.drop;
+      return s.peek;
+    endactionvalue;
   endinterface;
 endinstance
-/* XXX this should really work...
+/* XXX this can't be defined...
 instance ToGet#(src_t, t) provisos (ToSource#(src_t, t));
-  function toGet (s) = interface Get;
-    method get if (toSource(s).canGet) = toSource(s).get;
-  endinterface;
+  function toGet (s) = toGet(toSource(s));
 endinstance
 */
-
 //ToPut
 instance ToPut#(Sink#(t), t);
   function toPut (s) = interface Put;
     method put if (s.canPut) = s.put;
   endinterface;
 endinstance
-/* XXX this should really work...
+/* XXX this yields a warning...
 instance ToPut#(snk_t, t) provisos (ToSink#(snk_t, t));
-  function toPut (s) = interface Put;
-    method put if (toSink(s).canPut) = toSink(s).put;
-  endinterface;
+  function toPut (s) = toPut(toSink(s));
 endinstance
 */
 

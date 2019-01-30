@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2018 Alexandre Joannou
+ * Copyright (c) 2018-2019 Alexandre Joannou
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -142,7 +142,7 @@ provisos (NeedRsp#(req_t), Bits#(req_t, a__), Bits#(rsp_t, b__));
         endrule
         rule doGetRsp (ifcIdx.first == fromInteger(i));
           ifcIdx.deq;
-          let rsp <- slave.source.get;
+          let rsp <- get(slave.source);
           rspFF.enq(rsp);
         endrule
       endrules);
