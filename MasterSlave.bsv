@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2018 Alexandre Joannou
+ * Copyright (c) 2018-2019 Alexandre Joannou
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -29,6 +29,7 @@
 package MasterSlave;
 
 import SourceSink :: *;
+import Connectable :: *;
 
 ///////////////////////////////
 // Master / Slave interfaces //
@@ -43,6 +44,24 @@ interface Slave#(type req, type resp);
   interface Source#(resp) source;
   interface Sink#(req) sink;
 endinterface
+
+///////////////////////////
+// Connectable instances //
+////////////////////////////////////////////////////////////////////////////////
+
+instance Connectable#(Master#(req, resp), Slave#(req, resp));
+  module mkConnection#(Master#(req, resp) m, Slave#(req, resp) s)(Empty);
+    mkConnection(m.source, s.sink);
+    mkConnection(s.source, m.sink);
+  endmodule
+endinstance
+
+instance Connectable#(Slave#(req, resp), Master#(req, resp));
+  module mkConnection#(Slave#(req, resp) s, Master#(req, resp) m)(Empty);
+    mkConnection(m.source, s.sink);
+    mkConnection(s.source, m.sink);
+  endmodule
+endinstance
 
 ///////////
 // Utils //
