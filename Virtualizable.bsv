@@ -75,6 +75,10 @@ typeclass NeedRsp#(type req_t);
   function Bool needRsp(req_t req);
 endtypeclass
 
+instance NeedRsp#(Either#(a, b));
+  function needRsp(_) = True;
+endinstance
+
 instance Virtualizable#(Server#(req_t, rsp_t))
 provisos (NeedRsp#(req_t), Bits#(req_t, a__), Bits#(rsp_t, b__));
 
