@@ -187,4 +187,19 @@ module mkGetToSource#(Get#(t) get)(Source#(t)) provisos (Bits#(t, t_sz));
   return toSource(ff);
 endmodule
 
+/////////////////////////////
+// helpers and other utils //
+////////////////////////////////////////////////////////////////////////////////
+
+function Source#(t) nullSource = interface Source;
+  method canPeek = False;
+  method peek if (False) = ?;
+  method drop if (False) = noAction;
+endinterface;
+
+function Sink#(t) nullSink = interface Sink;
+  method canPut = True;
+  method put(x) = noAction;
+endinterface;
+
 endpackage
