@@ -39,7 +39,7 @@ import Connectable :: *;
 
 interface Source#(type t);
    (* always_ready *) method Bool canPeek;
-   (* always_ready *) method t peek;
+   method t peek;
    method Action drop;
 endinterface
 
