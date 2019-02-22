@@ -38,15 +38,13 @@ import Connectable :: *;
 ////////////////////////////////////////////////////////////////////////////////
 
 interface Source#(type t);
-   (* always_ready *)
-   method Bool canPeek;
-   method t peek;
+   (* always_ready *) method Bool canPeek;
+   (* always_ready *) method t peek;
    method Action drop;
 endinterface
 
 interface Sink#(type t);
-   (* always_ready *)
-   method Bool canPut;
+   (* always_ready *) method Bool canPut;
    method Action put(t val);
 endinterface
 
@@ -87,11 +85,11 @@ endinstance
 // ToSink
 
 typeclass ToSink#(type a, type b) dependencies (a determines b);
-    function Sink#(b) toSink (a val);
+  function Sink#(b) toSink (a val);
 endtypeclass
 
 instance ToSink#(Sink#(t), t);
-    function toSink = id;
+  function toSink = id;
 endinstance
 
 instance ToSink#(FIFOF#(t), t);
@@ -99,6 +97,73 @@ instance ToSink#(FIFOF#(t), t);
     method canPut = ff.notFull;
     method put    = ff.enq;
   endinterface;
+endinstance
+
+/////////////////////////////////////////////////////
+// ToUnguardedSource / ToUnguardedSink typeclasses //
+////////////////////////////////////////////////////////////////////////////////
+
+// ToUnguardedSource
+
+typeclass ToUnguardedSource#(type a, type b) dependencies(a determines b);
+  module toUnguardedSource#(a val, b dflt)(Source#(b));
+endtypeclass
+
+instance ToUnguardedSource#(src_t, t)
+  provisos (ToSource#(src_t, t), Bits#(t, _));
+  module toUnguardedSource#(src_t s, t dflt)(Source#(t));
+    let src = toSource(s);
+    let canPeekWire <- mkDWire(False);
+    let peekWire    <- mkDWire(dflt);
+    let dropWire    <- mkDWire(False);
+    rule setCanPeek; canPeekWire <= src.canPeek; endrule
+    rule setPeek;
+      if (!src.canPeek) begin
+        $display("WARNING: peeking from Source that can't be peeked");
+        //$finish(0);
+      end
+      peekWire <= src.peek;
+    endrule
+    rule doDrop (dropWire);
+      if (!src.canPeek) begin
+        $display("WARNING: dropping from Source that can't be dropped");
+        //$finish(0);
+      end
+      src.drop;
+    endrule
+    return interface Source;
+      method canPeek = canPeekWire;
+      method peek = peekWire;
+      method drop = action dropWire <= True; endaction;
+    endinterface;
+  endmodule
+endinstance
+
+// ToUnguardedSink
+
+typeclass ToUnguardedSink#(type a, type b) dependencies(a determines b);
+  module toUnguardedSink#(a val)(Sink#(b));
+endtypeclass
+
+instance ToUnguardedSink#(snk_t, t)
+  provisos (ToSink#(snk_t, t), Bits#(t, _));
+  module toUnguardedSink#(snk_t s)(Sink#(t));
+    let snk = toSink(s);
+    let canPutWire <- mkDWire(False);
+    let putWire <- mkRWire;
+    rule setCanPut; canPutWire <= snk.canPut; endrule
+    rule doPut(isValid(putWire.wget));
+      if (!snk.canPut) begin
+        $display("WARNING: putting in a Sink that can't be put into");
+        //$finish(0);
+      end
+      snk.put(putWire.wget.Valid);
+    endrule
+    return interface Sink;
+      method canPut = canPutWire;
+      method put(x) = action putWire.wset(x); endaction;
+    endinterface;
+  endmodule
 endinstance
 
 /////////////////////////////
