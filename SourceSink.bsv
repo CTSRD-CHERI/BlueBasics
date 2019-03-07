@@ -103,6 +103,28 @@ endinstance
 // ToUnguardedSource / ToUnguardedSink typeclasses //
 ////////////////////////////////////////////////////////////////////////////////
 
+/*
+  XXX PROBLEM XXX
+  Those modules (toUnguardedSink/toUnguardedSource) do not actually work with
+  the FIFOFs from Bluespec's standard library: despite reading the notEmpty
+  (canPeek) in a rule other than toUnguardedSource.doDrop and notFull (canPut)
+  in a rule other than toUnguardedSink.doPut, the Bluespec scheduler still
+  raises a conflict and claims that doDrop reads notEmpty and doPut reads
+  notFull. It seams to be due do the confusing requirement that both notFull
+  has a SB requirement with BOTH enq and deq and so does notEmpty...
+  Rule "tmp_snk_doPut" was treated as more urgent than
+  "tmp_src_doDrop". Conflicts:
+    "tmp_snk_doPut" cannot fire before "tmp_src_doDrop":
+      calls to ff1.enq vs. ff1.notEmpty
+    "tmp_src_doDrop" cannot fire before "tmp_snk_doPut":
+      calls to ff1.deq vs. ff1.notFull
+  Why notEmpty Vs enq (one can enq when notFull, irrespective of notEmpty)
+  Why notFull Vs deq (one can deq when notEmpty, irrespective of notFull)
+  Why those reqirements at all? (same for reads and writes of normal registers)
+  Those modules (toUnguardedSink/toUnguardedSource) do work with other FIFOF
+  modules that do not have the discussed scheduling requirements
+*/
+
 // ToUnguardedSource
 
 typeclass ToUnguardedSource#(type a, type b) dependencies(a determines b);
@@ -113,28 +135,23 @@ instance ToUnguardedSource#(src_t, t)
   provisos (ToSource#(src_t, t), Bits#(t, _));
   module toUnguardedSource#(src_t s, t dflt)(Source#(t));
     let src = toSource(s);
-    let canPeekWire <- mkDWire(False);
+    let canPeekWire <- mkPulseWire;
     let peekWire    <- mkDWire(dflt);
-    let dropWire    <- mkDWire(False);
-    rule setCanPeek; canPeekWire <= src.canPeek; endrule
-    rule setPeek;
-      if (!src.canPeek) begin
-        $display("WARNING: peeking from Source that can't be peeked");
-        //$finish(0);
-      end
-      peekWire <= src.peek;
+    let dropWire    <- mkPulseWire;
+    rule setCanPeek (src.canPeek); canPeekWire.send; endrule
+    rule setPeek (canPeekWire); peekWire <= src.peek; endrule
+    rule warnDoDrop (dropWire && !canPeekWire);
+      $display("WARNING: dropping from Source that can't be dropped from");
+      //$finish(0);
     endrule
-    rule doDrop (dropWire);
-      if (!src.canPeek) begin
-        $display("WARNING: dropping from Source that can't be dropped");
-        //$finish(0);
-      end
+    rule doDrop (dropWire && canPeekWire);
+      //$display("ALLGOOD: dropping from Source");
       src.drop;
     endrule
     return interface Source;
       method canPeek = canPeekWire;
       method peek = peekWire;
-      method drop = action dropWire <= True; endaction;
+      method drop = dropWire.send;
     endinterface;
   endmodule
 endinstance
@@ -149,14 +166,15 @@ instance ToUnguardedSink#(snk_t, t)
   provisos (ToSink#(snk_t, t), Bits#(t, _));
   module toUnguardedSink#(snk_t s)(Sink#(t));
     let snk = toSink(s);
-    let canPutWire <- mkDWire(False);
+    let canPutWire <- mkPulseWire;
     let putWire <- mkRWire;
-    rule setCanPut; canPutWire <= snk.canPut; endrule
-    rule doPut(isValid(putWire.wget));
-      if (!snk.canPut) begin
-        $display("WARNING: putting in a Sink that can't be put into");
-        //$finish(0);
-      end
+    rule setCanPut (snk.canPut); canPutWire.send; endrule
+    rule warnDoPut (isValid(putWire.wget) && !canPutWire);
+      $display("WARNING: putting into a Sink that can't be put into");
+      //$finish(0);
+    endrule
+    rule doPut (isValid(putWire.wget) && canPutWire);
+      //$display("ALLGOOD: putting in a Sink");
       snk.put(putWire.wget.Valid);
     endrule
     return interface Sink;
