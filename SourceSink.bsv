@@ -256,6 +256,7 @@ endmodule
 // helpers and other utils //
 ////////////////////////////////////////////////////////////////////////////////
 
+// null sources / sinks
 function Source#(t) nullSource = interface Source;
   method canPeek = False;
   method peek if (False) = ?;
@@ -265,6 +266,30 @@ endinterface;
 function Sink#(t) nullSink = interface Sink;
   method canPut = True;
   method put(x) = noAction;
+endinterface;
+
+// debug wrapping
+function Source#(t) debugSource(Source#(t) src, Fmt msg) provisos (FShow#(t)) =
+interface Source;
+  method canPeek = src.canPeek;
+  method peek = src.peek;
+  method drop = action
+    $display(msg,
+      " - Source drop method called - canPeek: ", fshow(src.canPeek),
+      " - ", fshow(src.peek));
+    src.drop;
+  endaction;
+endinterface;
+
+function Sink#(t) debugSink(Sink#(t) snk, Fmt msg) provisos (FShow#(t)) =
+interface Sink;
+  method canPut = snk.canPut;
+  method put(x) = action
+    $display(msg,
+      " - Sink put method called - canPut: ", fshow(snk.canPut),
+      " - ", fshow(x));
+    snk.put(x);
+  endaction;
 endinterface;
 
 endpackage
