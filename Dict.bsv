@@ -97,7 +97,7 @@ function `DICT_T insertWith_(
   `DICT_ELEM_T e) provisos (Eq#(key_t)) =
   case (d.d) matches
     tagged Nil: dict(cons(e, d.d));
-    tagged Cons .l: if (tpl_1(head(d.d)) == tpl_1(e))
+    .*: if (tpl_1(head(d.d)) == tpl_1(e))
       dict(cons(tuple2(tpl_1(e), merge(tpl_2(head(d.d)), tpl_2(e))), tail(d.d)));
       else dict(cons(head(d.d), insertWith_(merge, dict(tail(d.d)), e).d));
   endcase;
