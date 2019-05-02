@@ -106,58 +106,48 @@ endinstance
 
 // ToUnguardedSource
 
-typeclass ToUnguardedSource#(type a, type b) dependencies(a determines b);
-  module toUnguardedSource#(a val, b dflt)(Source#(b));
-endtypeclass
-
-instance ToUnguardedSource#(src_t, t)
-  provisos (ToSource#(src_t, t), Bits#(t, _));
-  module toUnguardedSource#(src_t s, t dflt)(Source#(t));
-    let src = toSource(s);
-    let peekWire    <- mkDWire(dflt);
-    let dropWire    <- mkPulseWire;
-    rule setPeek; peekWire <= src.peek; endrule
-    rule warnDoDrop (dropWire && !src.canPeek);
-      $display("WARNING: dropping from Source that can't be dropped from");
-      //$finish(0);
-    endrule
-    rule doDrop (dropWire && src.canPeek);
-      //$display("ALLGOOD: dropping from Source");
-      src.drop;
-    endrule
-    return interface Source;
-      method canPeek = src.canPeek;
-      method peek = peekWire;
-      method drop = dropWire.send;
-    endinterface;
-  endmodule
-endinstance
+(* always_ready = "canPeek, peek, drop" *)
+module toUnguardedSource#(src_t s, t dflt)(Source#(t)) provisos (ToSource#(src_t, t), Bits#(t, _));
+  let src = toSource(s);
+  let peekWire    <- mkDWire(dflt);
+  let dropWire    <- mkPulseWire;
+  rule setPeek; peekWire <= src.peek; endrule
+  rule warnDoDrop (dropWire && !src.canPeek);
+    $display("WARNING: dropping from Source that can't be dropped from");
+    //$finish(0);
+  endrule
+  rule doDrop (dropWire && src.canPeek);
+    //$display("ALLGOOD: dropping from Source");
+    src.drop;
+  endrule
+  return interface Source;
+    method Bool canPeek;
+      return src.canPeek;
+    endmethod
+    method peek = peekWire;
+    method drop = dropWire.send;
+  endinterface;
+endmodule
 
 // ToUnguardedSink
 
-typeclass ToUnguardedSink#(type a, type b) dependencies(a determines b);
-  module toUnguardedSink#(a val)(Sink#(b));
-endtypeclass
-
-instance ToUnguardedSink#(snk_t, t)
-  provisos (ToSink#(snk_t, t), Bits#(t, _));
-  module toUnguardedSink#(snk_t s)(Sink#(t));
-    let snk = toSink(s);
-    let putWire <- mkRWire;
-    rule warnDoPut (isValid(putWire.wget) && !snk.canPut);
-      $display("WARNING: putting into a Sink that can't be put into");
-      //$finish(0);
-    endrule
-    rule doPut (isValid(putWire.wget));
-      //$display("ALLGOOD: putting in a Sink");
-      snk.put(putWire.wget.Valid);
-    endrule
-    return interface Sink;
-      method canPut = snk.canPut;
-      method put(x) = action putWire.wset(x); endaction;
-    endinterface;
-  endmodule
-endinstance
+(* always_ready = "canPut, put" *)
+module toUnguardedSink#(snk_t s)(Sink#(t)) provisos (ToSink#(snk_t, t), Bits#(t, _));
+  let snk = toSink(s);
+  let putWire <- mkRWire;
+  rule warnDoPut (isValid(putWire.wget) && !snk.canPut);
+    $display("WARNING: putting into a Sink that can't be put into");
+    //$finish(0);
+  endrule
+  rule doPut (isValid(putWire.wget));
+    //$display("ALLGOOD: putting in a Sink");
+    snk.put(putWire.wget.Valid);
+  endrule
+  return interface Sink;
+    method canPut = snk.canPut;
+    method put(x) = action putWire.wset(x); endaction;
+  endinterface;
+endmodule
 
 /////////////////////////////
 // ToGet / ToPut instances //
