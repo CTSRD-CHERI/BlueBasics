@@ -104,28 +104,6 @@ endinstance
 // ToUnguardedSource / ToUnguardedSink typeclasses //
 ////////////////////////////////////////////////////////////////////////////////
 
-/*
-  XXX PROBLEM XXX
-  Those modules (toUnguardedSink/toUnguardedSource) do not actually work with
-  the FIFOFs from Bluespec's standard library: despite reading the notEmpty
-  (canPeek) in a rule other than toUnguardedSource.doDrop and notFull (canPut)
-  in a rule other than toUnguardedSink.doPut, the Bluespec scheduler still
-  raises a conflict and claims that doDrop reads notEmpty and doPut reads
-  notFull. It seams to be due do the confusing requirement that both notFull
-  has a SB requirement with BOTH enq and deq and so does notEmpty...
-  Rule "tmp_snk_doPut" was treated as more urgent than
-  "tmp_src_doDrop". Conflicts:
-    "tmp_snk_doPut" cannot fire before "tmp_src_doDrop":
-      calls to ff1.enq vs. ff1.notEmpty
-    "tmp_src_doDrop" cannot fire before "tmp_snk_doPut":
-      calls to ff1.deq vs. ff1.notFull
-  Why notEmpty Vs enq (one can enq when notFull, irrespective of notEmpty)
-  Why notFull Vs deq (one can deq when notEmpty, irrespective of notFull)
-  Why those reqirements at all? (same for reads and writes of normal registers)
-  Those modules (toUnguardedSink/toUnguardedSource) do work with other FIFOF
-  modules that do not have the discussed scheduling requirements
-*/
-
 // ToUnguardedSource
 
 typeclass ToUnguardedSource#(type a, type b) dependencies(a determines b);
