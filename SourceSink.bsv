@@ -1,5 +1,6 @@
 /*-
  * Copyright (c) 2018-2019 Alexandre Joannou
+ * Copyright (c) 2019 Peter Rugg
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -304,6 +305,18 @@ interface Sink;
       " - ", fshow(x));
     snk.put(x);
   endaction;
+endinterface;
+
+// add a Boolean guard to a Source
+function Source#(t) guardSource (Source#(t) raw, Bool block) = interface Source;
+  method canPeek = raw.canPeek && !block;
+  method peek if (!block) = raw.peek;
+  method drop if (!block) = raw.drop;
+endinterface;
+
+function Sink#(t) guardSink (Sink#(t) raw, Bool block) = interface Sink;
+  method canPut = raw.canPut && !block;
+  method put if (!block) = raw.put;
 endinterface;
 
 endpackage
