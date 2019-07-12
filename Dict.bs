@@ -1,0 +1,123 @@
+{-
+ - Copyright (c) 2018 Alexandre Joannou
+ - All rights reserved.
+ -
+ - This software was developed by SRI International and the University of
+ - Cambridge Computer Laboratory (Department of Computer Science and
+ - Technology) under DARPA contract HR0011-18-C-0016 ("ECATS"), as part of the
+ - DARPA SSITH research programme.
+ -
+ - @BERI_LICENSE_HEADER_START@
+ -
+ - Licensed to BERI Open Systems C.I.C. (BERI) under one or more contributor
+ - license agreements.  See the NOTICE file distributed with this work for
+ - additional information regarding copyright ownership.  BERI licenses this
+ - file to you under the BERI Hardware-Software License, Version 1.0 (the
+ - "License"); you may not use this file except in compliance with the
+ - License.  You may obtain a copy of the License at:
+ -
+ -   http://www.beri-open-systems.org/legal/license-1-0.txt
+ -
+ - Unless required by applicable law or agreed to in writing, Work distributed
+ - under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+ - CONDITIONS OF ANY KIND, either express or implied.  See the License for the
+ - specific language governing permissions and limitations under the License.
+ -
+ - @BERI_LICENSE_HEADER_END@
+ -}
+
+package Dict (
+  Dict,
+  DictCons(..),
+  keys,
+  values,
+  lookup,
+  lookupWith,
+  filter,
+  insertWith,
+  insertMappend,
+  insert,
+  mergeWith,
+  concatWith
+  -- collapseWith
+) where
+
+-- list of imported packages
+import List
+import Monoid
+
+-- Dict type
+type Dict key_t value_t = List (key_t, value_t)
+
+-- dictionary constructor
+class DictCons a where dict :: a
+
+instance DictCons ((key_t, value_t) -> Dict key_t value_t) where
+  dict (k, v) = cons (k, v) Nil
+
+instance DictCons (key_t -> value_t -> Dict key_t value_t) where
+  dict k v = cons (k, v) Nil
+
+instance DictCons (List (key_t, value_t) -> Dict key_t value_t) where
+  dict = id
+
+-- Dictionary inspection
+keys :: Dict key_t value_t -> List key_t
+keys = map (\(k, _) -> k)
+values :: Dict key_t value_t -> List value_t
+values = map (\(_, v) -> v)
+lookup :: (Eq key_t) => key_t -> Dict key_t value_t -> Maybe value_t
+lookup =  List.lookup
+lookupWith :: (key_t -> Bool) -> Dict key_t value_t -> Maybe value_t
+lookupWith f d = case find (\(x, _) -> f x) d of
+  Just (_, v) -> Just v
+  Nothing     -> Nothing
+filter :: ((key_t, value_t) -> Bool) -> Dict key_t value_t -> Dict key_t value_t
+filter f d = dict $ List.filter f d
+
+-- Dictionary insert
+insertWith :: (Eq key_t) => (value_t -> value_t -> value_t)
+           -> Dict key_t value_t -> key_t -> value_t
+           -> Dict key_t value_t
+insertWith merge d k v = case d of
+  Nil                           -> dict (k, v)
+  Cons (k0, v0) xs when k0 == k -> cons (k0, merge v0 v) xs
+  Cons (k0, v0) xs              -> cons (k0, v0) $ insertWith merge xs k v
+insertMappend :: (Eq key_t, Monoid value_t) =>
+                 Dict key_t value_t -> key_t -> value_t -> Dict key_t value_t
+insertMappend = insertWith mappend
+insert :: (Eq key_t) =>
+          Dict key_t value_t -> key_t -> value_t -> Dict key_t value_t
+insert = insertWith (flip constFn)
+
+-- Dictionary merging
+mergeWith :: (Eq key_t) => (value_t -> value_t -> value_t)
+                        -> Dict key_t value_t -> Dict key_t value_t
+                        -> Dict key_t value_t
+mergeWith merge = foldl (\d (k, v) -> insertWith merge d k v)
+
+-- Dictionary concatenation
+concatWith :: (Eq key_t) => (value_t -> value_t -> value_t)
+                         -> List (Dict key_t value_t)
+                         -> Dict key_t value_t
+concatWith concat xs = foldl (mergeWith concat) Nil xs
+
+-- Dictionary collapsing
+{-
+function value_t collapseWith(
+  function value_t collapse(value_t a, value_t b),
+  (Dict key_t value_t) x,
+  value_t e) = foldl(collapse, e, values(x));
+function value_t collapseWith(
+  (Dict key_t value_t) x,
+  value_t e,
+  function value_t collapse(value_t a, value_t b)) provisos (Ord#(key_t));
+  function cmp(a, b) = compare(tpl_1(a), tpl_1(b));
+  return foldl(collapse, e, map(tpl_2, sortBy(cmp, x.d)));
+endfunction
+-}
+
+-- Dictionary monoid instance
+instance (Eq key_t, Monoid value_t) => Monoid (Dict key_t value_t) where
+  mempty  = Nil
+  mappend = mergeWith mappend

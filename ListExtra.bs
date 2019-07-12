@@ -1,0 +1,105 @@
+{-
+ - Copyright (c) 2018 Alexandre Joannou
+ - All rights reserved.
+ -
+ - This software was developed by SRI International and the University of
+ - Cambridge Computer Laboratory (Department of Computer Science and
+ - Technology) under DARPA contract HR0011-18-C-0016 ("ECATS"), as part of the
+ - DARPA SSITH research programme.
+ -
+ - @BERI_LICENSE_HEADER_START@
+ -
+ - Licensed to BERI Open Systems C.I.C. (BERI) under one or more contributor
+ - license agreements.  See the NOTICE file distributed with this work for
+ - additional information regarding copyright ownership.  BERI licenses this
+ - file to you under the BERI Hardware-Software License, Version 1.0 (the
+ - "License"); you may not use this file except in compliance with the
+ - License.  You may obtain a copy of the License at:
+ -
+ -   http://www.beri-open-systems.org/legal/license-1-0.txt
+ -
+ - Unless required by applicable law or agreed to in writing, Work distributed
+ - under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+ - CONDITIONS OF ANY KIND, either express or implied.  See the License for the
+ - specific language governing permissions and limitations under the License.
+ -
+ - @BERI_LICENSE_HEADER_END@
+ -}
+
+package ListExtra (
+  package List,
+  list,
+  MkList,
+  splitAt,
+  concatMap,
+  rotateBy,
+  rotateRBy,
+  bitToList,
+  listToBit,
+  oneHotList,
+  oneHotRotateBy,
+  oneHotRotateRBy,
+  firstHotToOneHot,
+  findOneHotWith
+) where
+
+import Printf
+import List
+import qualified Vector
+
+-- Nice friendly list constructor lifted from Bluecheck's sources:
+-- https://github.com/CTSRD-CHERI/bluecheck.git
+--------------------------------------------------------------------------------
+
+class MkList a b | a -> b where
+  mkList :: List b -> a
+
+instance MkList (List b) b where
+  mkList = List.reverse
+
+instance (MkList a b) => MkList (b -> a) b where
+  mkList acc val = mkList (cons val acc)
+
+list :: (MkList a b) => a
+list = mkList Nil
+
+-- basic utility functions
+
+splitAt :: Integer -> List a -> (List a, List a)
+splitAt n xs = (take n xs, drop n xs)
+
+concatMap :: (a -> List a) -> List a -> List a
+concatMap f xs = concat (map f xs)
+
+rotateBy :: Integer -> List a -> List a
+rotateBy n xs = append (drop n xs) (take n xs)
+
+rotateRBy :: Integer -> List a -> List a
+rotateRBy n xs = reverse $ rotateBy n (reverse xs)
+
+bitToList :: Bit n -> List Bool
+bitToList x = map (\i -> unpack x[i:i]) (upto 0 ((valueOf n) - 1))
+
+listToBit :: List Bool -> Bit n
+listToBit x = pack (Vector.toVector x)
+
+oneHotList :: Integer -> Integer -> List Bool
+oneHotList sz idx = rotateRBy idx $ cons True (replicate (sz-1) False)
+
+oneHotRotateBy :: (Bits a a__) => List Bool -> List a -> List a
+oneHotRotateBy xs ys =
+  let allIdxs = map (\i -> rotateRBy i xs) (upto 0 ((length xs) - 1))
+  in map (\idxs -> oneHotSelect idxs ys) allIdxs
+
+oneHotRotateRBy :: (Bits a a__) => List Bool -> List a -> List a
+oneHotRotateRBy xs ys = reverse (oneHotRotateBy xs (reverse ys))
+
+firstHotToOneHot :: List Bool -> Maybe (List Bool)
+firstHotToOneHot (Cons x xs) =
+  let lst = scanl (\(fnd, _) e -> (fnd || e, not fnd && e)) (False, x) xs
+      (founds, oneHot) = unzip lst
+      found = or founds
+  in if found then Just oneHot else Nothing
+
+findOneHotWith :: (t -> Bool) -> List t -> Maybe (List Bool)
+findOneHotWith p xs = firstHotToOneHot (map p xs)

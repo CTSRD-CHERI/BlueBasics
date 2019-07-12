@@ -1,0 +1,254 @@
+{-
+ - Copyright (c) 2018-2019 Alexandre Joannou
+ - Copyright (c) 2019 Peter Rugg
+ - Copyright (c) 2019 Jonathan Woodruff
+ - All rights reserved.
+ -
+ - This software was developed by SRI International and the University of
+ - Cambridge Computer Laboratory (Department of Computer Science and
+ - Technology) under DARPA contract HR0011-18-C-0016 ("ECATS"), as part of the
+ - DARPA SSITH research programme.
+ -
+ - @BERI_LICENSE_HEADER_START@
+ -
+ - Licensed to BERI Open Systems C.I.C. (BERI) under one or more contributor
+ - license agreements.  See the NOTICE file distributed with this work for
+ - additional information regarding copyright ownership.  BERI licenses this
+ - file to you under the BERI Hardware-Software License, Version 1.0 (the
+ - "License"); you may not use this file except in compliance with the
+ - License.  You may obtain a copy of the License at:
+ -
+ -   http://www.beri-open-systems.org/legal/license-1-0.txt
+ -
+ - Unless required by applicable law or agreed to in writing, Work distributed
+ - under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+ - CONDITIONS OF ANY KIND, either express or implied.  See the License for the
+ - specific language governing permissions and limitations under the License.
+ -
+ - @BERI_LICENSE_HEADER_END@
+ -}
+
+package SourceSink where
+
+import FIFOF
+import SpecialFIFOs
+import GetPut
+import Connectable
+
+------------------------------
+-- Source / Sink interfaces --
+--------------------------------------------------------------------------------
+
+interface Source t =
+   canPeek :: Bool {-# always_ready #-}
+   peek    :: t
+   drop    :: Action
+
+interface Sink t =
+   canPut :: Bool {-# always_ready #-}
+   put    :: t -> Action
+
+------------------
+-- HasGet class --
+--------------------------------------------------------------------------------
+
+class HasGet a b where
+  get :: a -> ActionValue b
+
+instance (ToGet a b) => HasGet a b where
+  get x = (toGet x).get
+
+-------------------------------
+-- ToSource / ToSink classes --
+--------------------------------------------------------------------------------
+
+-- ToSource
+
+class ToSource a b | a -> b where
+  toSource :: a -> Source b
+
+instance ToSource (Source t) t where
+  toSource = id
+
+instance ToSource (FIFOF t) t where
+  toSource ff = interface Source
+                  canPeek = ff.notEmpty
+                  peek    = ff.first
+                  drop    = ff.deq
+
+-- ToSink
+
+class ToSink a b | a -> b where
+  toSink :: a -> Sink b
+
+instance ToSink (Sink t) t where
+  toSink = id
+
+instance ToSink (FIFOF t) t where
+  toSink ff = interface Sink
+                canPut = ff.notFull
+                put    = ff.enq
+
+------------------------------------
+-- toUnguardedSource/Sink modules --
+--------------------------------------------------------------------------------
+
+{-# properties toUnguardedSource = {alwaysReady} #-}
+toUnguardedSource :: (ToSource src_t t, Bits t t_sz) => src_t -> t -> Module (Source t)
+toUnguardedSource s dflt = module
+  let src = toSource s
+  peekWire <- mkDWire dflt
+  dropWire <- mkPulseWire
+  rules
+    when True ==> action peekWire := src.peek
+    when dropWire && (not src.canPeek) ==>
+      action $display("WARNING: dropping from Source that can't be dropped from")
+             -- $finish(0)
+    when dropWire && src.canPeek ==>
+      action -- $display("ALLGOOD: dropping from Source")
+             src.drop
+  return $ interface Source
+             canPeek = src.canPeek
+             peek    = peekWire
+             drop    = dropWire.send
+
+{-# properties toUnguardedSink = {alwaysReady} #-}
+toUnguardedSink :: (ToSink snk_t t, Bits t t_sz) => snk_t -> Module (Sink t)
+toUnguardedSink s = module
+  let snk = toSink s
+  putWire <- mkRWire
+  rules
+    when isValid putWire.wget && (not snk.canPut) ==>
+      action $display("WARNING: putting into a Sink that can't be put into")
+             -- $finish(0)
+    when isValid putWire.wget ==>
+      action -- $display("ALLGOOD: putting in a Sink");
+             snk.put (fromMaybe _ putWire.wget)
+  return $ interface Sink
+             canPut = snk.canPut
+             put    = putWire.wset
+
+------------------------------------
+-- toGuardedSource/Sink functions --
+--------------------------------------------------------------------------------
+
+toGuardedSource :: (ToSource src_t t) => src_t -> Source t
+toGuardedSource s = let src = toSource s
+                    in interface Source
+                         canPeek = src.canPeek
+                         peek  when src.canPeek = src.peek
+                         drop  when src.canPeek = src.drop
+
+toGuardedSink :: (ToSink snk_t t) => snk_t -> Sink t
+toGuardedSink s = let snk = toSink s
+                  in interface Sink
+                       canPut = snk.canPut
+                       put when snk.canPut = snk.put
+
+-----------------------------
+-- ToGet / ToPut instances --
+--------------------------------------------------------------------------------
+
+-- ToGet
+instance ToGet (Source t) t where
+  toGet s = interface Get
+              get when s.canPeek = do s.drop
+                                      return s.peek
+{- XXX this can't be defined...
+instance ToGet#(src_t, t) provisos (ToSource#(src_t, t));
+  function toGet (s) = toGet(toSource(s));
+endinstance
+-}
+--ToPut
+instance ToPut (Sink t) t where
+  toPut s = interface Put
+              put when s.canPut = s.put
+{- XXX this yields a warning...
+instance ToPut#(snk_t, t) provisos (ToSink#(snk_t, t));
+  function toPut (s) = toPut(toSink(s));
+endinstance
+-}
+
+---------------------------
+-- Connectable instances --
+--------------------------------------------------------------------------------
+
+instance Connectable (Source t) (Sink t) where
+  mkConnection src snk = mkConnection (toGet src) (toPut snk)
+
+instance Connectable (Sink t) (Source t) where
+  mkConnection snk src = mkConnection (toGet src) (toPut snk)
+
+instance Connectable (Source t) (Put t) where
+  mkConnection src put = mkConnection (toGet src) put
+
+instance Connectable (Put t) (Source t) where
+  mkConnection put src = mkConnection (toGet src) put
+
+instance Connectable (Sink t) (Get t) where
+  mkConnection snk get = mkConnection get (toPut snk)
+
+instance Connectable (Get t) (Sink t) where
+  mkConnection get snk = mkConnection get (toPut snk)
+
+-----------
+-- Shims --
+--------------------------------------------------------------------------------
+
+mkPutToSink :: (Bits t t_sz) => Put t -> Module (Sink t)
+mkPutToSink put = module
+  ff <- mkBypassFIFOF
+  mkConnection (toGet ff) put
+  return $ toSink ff
+
+mkGetToSource :: (Bits t t_sz) => Get t -> Module (Source t)
+mkGetToSource get = module
+  ff <- mkBypassFIFOF
+  mkConnection get (toPut ff)
+  return $ toSource ff
+
+-----------------------------
+-- helpers and other utils --
+--------------------------------------------------------------------------------
+
+-- null sources / sinks
+nullSource :: Source t
+nullSource = interface Source
+               canPeek         = False
+               peek when False = _
+               drop when False = noAction
+
+nullSink :: Sink t
+nullSink = interface Sink
+             canPut = True
+             put _  = noAction
+
+-- debug wrapping
+debugSource :: (FShow t) => Source t -> Fmt -> Source t
+debugSource src msg = interface Source
+                        canPeek = src.canPeek
+                        peek    = src.peek
+                        drop    = action $display msg
+                                                  " - Source drop method called - canPeek: " (fshow src.canPeek)
+                                                  " - " (fshow src.peek)
+                                         src.drop
+
+debugSink :: (FShow t) => Sink t -> Fmt -> Sink t
+debugSink snk msg = interface Sink
+                      canPut = snk.canPut;
+                      put x  = action $display msg
+                                               " - Sink put method called - canPut: " (fshow snk.canPut)
+                                               " - " (fshow x)
+                                      snk.put x
+
+-- add a Boolean guard to a Source
+guardSource :: Source t -> Bool -> Source t
+guardSource raw block = interface Source
+                          canPeek             = raw.canPeek && not block
+                          peek when not block = raw.peek
+                          drop when not block = raw.drop
+
+guardSink :: Sink t -> Bool -> Sink t
+guardSink raw block = interface Sink
+                        canPut             = raw.canPut && not block
+                        put when not block = raw.put
