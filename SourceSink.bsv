@@ -1,6 +1,7 @@
 /*-
  * Copyright (c) 2018-2019 Alexandre Joannou
  * Copyright (c) 2019 Peter Rugg
+ * Copyright (c) 2019 Jonathan Woodruff
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -79,7 +80,7 @@ instance ToSource#(FIFOF#(t), t);
   function toSource (ff) = interface Source#(t);
     method canPeek = ff.notEmpty;
     method peek    = ff.first;
-    method drop    = ff.deq; 
+    method drop    = ff.deq;
   endinterface;
 endinstance
 
@@ -100,14 +101,13 @@ instance ToSink#(FIFOF#(t), t);
   endinterface;
 endinstance
 
-/////////////////////////////////////////////////////
-// ToUnguardedSource / ToUnguardedSink typeclasses //
+////////////////////////////////////
+// toUnguardedSource/Sink modules //
 ////////////////////////////////////////////////////////////////////////////////
 
-// ToUnguardedSource
-
 (* always_ready = "canPeek, peek, drop" *)
-module toUnguardedSource#(src_t s, t dflt)(Source#(t)) provisos (ToSource#(src_t, t), Bits#(t, _));
+module toUnguardedSource#(src_t s, t dflt)(Source#(t))
+  provisos (ToSource#(src_t, t), Bits#(t, _));
   let src = toSource(s);
   let peekWire    <- mkDWire(dflt);
   let dropWire    <- mkPulseWire;
@@ -121,18 +121,15 @@ module toUnguardedSource#(src_t s, t dflt)(Source#(t)) provisos (ToSource#(src_t
     src.drop;
   endrule
   return interface Source;
-    method Bool canPeek;
-      return src.canPeek;
-    endmethod
-    method peek = peekWire;
-    method drop = dropWire.send;
+    method canPeek = src.canPeek;
+    method peek    = peekWire;
+    method drop    = dropWire.send;
   endinterface;
 endmodule
 
-// ToUnguardedSink
-
 (* always_ready = "canPut, put" *)
-module toUnguardedSink#(snk_t s)(Sink#(t)) provisos (ToSink#(snk_t, t), Bits#(t, _));
+module toUnguardedSink#(snk_t s)(Sink#(t))
+  provisos (ToSink#(snk_t, t), Bits#(t, _));
   let snk = toSink(s);
   let putWire <- mkRWire;
   rule warnDoPut (isValid(putWire.wget) && !snk.canPut);
@@ -145,15 +142,13 @@ module toUnguardedSink#(snk_t s)(Sink#(t)) provisos (ToSink#(snk_t, t), Bits#(t,
   endrule
   return interface Sink;
     method canPut = snk.canPut;
-    method put(x) = action putWire.wset(x); endaction;
+    method put    = putWire.wset;
   endinterface;
 endmodule
 
-/////////////////////////////////////////////////
-// ToGuardedSource / ToGuardedSink typeclasses //
+////////////////////////////////////
+// toGuardedSource/Sink functions //
 ////////////////////////////////////////////////////////////////////////////////
-
-// ToGuardedSource
 
 function Source#(t) toGuardedSource(src_t s) provisos (ToSource#(src_t, t));
   let src = toSource(s);
@@ -163,8 +158,6 @@ function Source#(t) toGuardedSource(src_t s) provisos (ToSource#(src_t, t));
     method drop if (src.canPeek) = src.drop;
   endinterface;
 endfunction
-
-// ToGuardedSink
 
 function Sink#(t) toGuardedSink(snk_t s) provisos (ToSink#(snk_t, t));
   let snk = toSink(s);
