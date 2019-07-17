@@ -149,6 +149,31 @@ module toUnguardedSink#(snk_t s)(Sink#(t)) provisos (ToSink#(snk_t, t), Bits#(t,
   endinterface;
 endmodule
 
+/////////////////////////////////////////////////
+// ToGuardedSource / ToGuardedSink typeclasses //
+////////////////////////////////////////////////////////////////////////////////
+
+// ToGuardedSource
+
+function Source#(t) toGuardedSource(src_t s) provisos (ToSource#(src_t, t));
+  let src = toSource(s);
+  return interface Source;
+    method canPeek = src.canPeek;
+    method peek if (src.canPeek) = src.peek;
+    method drop if (src.canPeek) = src.drop;
+  endinterface;
+endfunction
+
+// ToGuardedSink
+
+function Sink#(t) toGuardedSink(snk_t s) provisos (ToSink#(snk_t, t));
+  let snk = toSink(s);
+  return interface Sink;
+    method canPut = snk.canPut;
+    method put if (snk.canPut) = snk.put;
+  endinterface;
+endfunction
+
 /////////////////////////////
 // ToGet / ToPut instances //
 ////////////////////////////////////////////////////////////////////////////////
