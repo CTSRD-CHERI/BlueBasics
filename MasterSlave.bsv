@@ -64,6 +64,24 @@ instance Connectable#(Slave#(req, resp), Master#(req, resp));
 endinstance
 
 ///////////
+// Debug //
+////////////////////////////////////////////////////////////////////////////////
+
+function Master#(req, resp) debugMaster(Master#(req, resp) m, Fmt msg)
+  provisos (FShow#(req), FShow#(resp)) =
+  interface Master;
+    interface source = debugSource(m.source, msg);
+    interface sink   = debugSink(m.sink, msg);
+  endinterface;
+
+function Slave#(req, resp) debugSlave(Slave#(req, resp) s, Fmt msg)
+  provisos (FShow#(req), FShow#(resp)) =
+  interface Slave;
+    interface source = debugSource(s.source, msg);
+    interface sink   = debugSink(s.sink, msg);
+  endinterface;
+
+///////////
 // Utils //
 ////////////////////////////////////////////////////////////////////////////////
 // Get desired Master / Slave sub-interface
