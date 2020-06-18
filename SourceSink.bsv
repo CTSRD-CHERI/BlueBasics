@@ -113,7 +113,7 @@ module toUnguardedSource#(src_t s, t dflt)(Source#(t))
   let dropWire    <- mkPulseWire;
   rule setPeek; peekWire <= src.peek; endrule
   rule warnDoDrop (dropWire && !src.canPeek);
-    $display("WARNING: dropping from Source that can't be dropped from");
+    $display("WARNING: %m - dropping from Source that can't be dropped from");
     //$finish(0);
   endrule
   rule doDrop (dropWire && src.canPeek);
@@ -133,7 +133,7 @@ module toUnguardedSink#(snk_t s)(Sink#(t))
   let snk = toSink(s);
   let putWire <- mkRWire;
   rule warnDoPut (isValid(putWire.wget) && !snk.canPut);
-    $display("WARNING: putting into a Sink that can't be put into");
+    $display("WARNING: %m - putting into a Sink that can't be put into");
     //$finish(0);
   endrule
   rule doPut (isValid(putWire.wget));
@@ -201,18 +201,24 @@ endinstance
 // Connectable instances //
 ////////////////////////////////////////////////////////////////////////////////
 
-instance Connectable#(Source#(t), Sink#(t));
+instance Connectable#(Source#(t), Sink#(t)) provisos (Bits#(t, t_sz));
   module mkConnection#(Source#(t) src, Sink#(t) snk)(Empty);
-    mkConnection(toGet(src), toPut(snk));
+    let ug_src <- toUnguardedSource(src, ?);
+    let ug_snk <- toUnguardedSink(snk);
+    rule connect (ug_src.canPeek && ug_snk.canPut);
+      ug_snk.put(ug_src.peek);
+      ug_src.drop;
+    endrule
   endmodule
 endinstance
 
-instance Connectable#(Sink#(t), Source#(t));
+instance Connectable#(Sink#(t), Source#(t)) provisos (Bits#(t, t_sz));
   module mkConnection#(Sink#(t) snk, Source#(t) src)(Empty);
-    mkConnection(toGet(src), toPut(snk));
+    mkConnection(src, snk);
   endmodule
 endinstance
 
+/*
 instance Connectable#(Source#(t), Put#(t));
   module mkConnection#(Source#(t) src, Put#(t) put)(Empty);
     mkConnection(toGet(src), put);
@@ -236,6 +242,7 @@ instance Connectable#(Get#(t), Sink#(t));
     mkConnection(get, toPut(snk));
   endmodule
 endinstance
+*/
 
 ///////////
 // Shims //

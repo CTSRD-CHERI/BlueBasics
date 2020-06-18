@@ -49,14 +49,16 @@ endinterface
 // Connectable instances //
 ////////////////////////////////////////////////////////////////////////////////
 
-instance Connectable#(Master#(req, resp), Slave#(req, resp));
+instance Connectable#(Master#(req, resp), Slave#(req, resp))
+  provisos (Bits#(req, req_sz), Bits#(resp, resp_sz));
   module mkConnection#(Master#(req, resp) m, Slave#(req, resp) s)(Empty);
     mkConnection(m.source, s.sink);
     mkConnection(s.source, m.sink);
   endmodule
 endinstance
 
-instance Connectable#(Slave#(req, resp), Master#(req, resp));
+instance Connectable#(Slave#(req, resp), Master#(req, resp))
+  provisos (Bits#(req, req_sz), Bits#(resp, resp_sz));
   module mkConnection#(Slave#(req, resp) s, Master#(req, resp) m)(Empty);
     mkConnection(m.source, s.sink);
     mkConnection(s.source, m.sink);
