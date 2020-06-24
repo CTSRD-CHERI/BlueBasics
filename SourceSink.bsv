@@ -136,7 +136,7 @@ module toUnguardedSink#(snk_t s)(Sink#(t))
     $display("WARNING: %m - putting into a Sink that can't be put into");
     //$finish(0);
   endrule
-  rule doPut (isValid(putWire.wget) && snk.canPut);
+  rule doPut (isValid(putWire.wget));
     //$display("ALLGOOD: putting in a Sink");
     snk.put(putWire.wget.Valid);
   endrule
