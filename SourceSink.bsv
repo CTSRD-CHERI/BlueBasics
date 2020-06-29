@@ -101,6 +101,25 @@ instance ToSink#(FIFOF#(t), t);
   endinterface;
 endinstance
 
+/////////////////////////
+// mapSource / mapSink //
+////////////////////////////////////////////////////////////////////////////////
+
+// XXX Note: It would be nice to have the Functor class defined...
+
+function Source #(b) mapSource ( function b f (a x)
+                               , Source #(a) src) = interface Source;
+  method canPeek = src.canPeek;
+  method peek    = f (src.peek);
+  method drop    = src.drop;
+endinterface;
+
+function Sink #(b) mapSink ( function a f (b x)
+                           , Sink #(a) snk) = interface Sink;
+  method canPut  = snk.canPut;
+  method put (x) = snk.put (f (x));
+endinterface;
+
 ////////////////////////////////////
 // toUnguardedSource/Sink modules //
 ////////////////////////////////////////////////////////////////////////////////
