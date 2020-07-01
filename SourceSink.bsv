@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2018-2020 Alexandre Joannou
+ * Copyright (c) 2018-2019 Alexandre Joannou
  * Copyright (c) 2019 Peter Rugg
  * Copyright (c) 2019 Jonathan Woodruff
  * All rights reserved.
@@ -30,10 +30,10 @@
 
 package SourceSink;
 
-import FIFOF        :: *;
-import GetPut       :: *;
-import Connectable  :: *;
+import FIFOF :: *;
 import SpecialFIFOs :: *;
+import GetPut :: *;
+import Connectable :: *;
 
 //////////////////////////////
 // Source / Sink interfaces //
@@ -120,45 +120,16 @@ function Sink #(b) mapSink ( function a f (b x)
   method put (x) = snk.put (f (x));
 endinterface;
 
-//////////////////////////////////////////
-// Add a guard to source / sink methods //
-////////////////////////////////////////////////////////////////////////////////
-
-function Source #(t) guardSource (source_t s, Bool guard)
-  provisos (ToSource #(source_t, t));
-  let src = toSource (s);
-  return interface Source;
-    method canPeek = src.canPeek && !guard;
-    method peek if (!guard) = src.peek;
-    method drop if (!guard) = src.drop;
-  endinterface;
-endfunction
-
-function Sink #(t) guardSink (sink_t s, Bool guard)
-  provisos (ToSink #(sink_t, t));
-  let snk = toSink (s);
-  return interface Sink;
-    method canPut = snk.canPut && !guard;
-    method put if (!guard) = snk.put;
-  endinterface;
-endfunction
-
-function Source #(t) toGuardedSource (src_t s) provisos (ToSource #(src_t, t)) =
-  guardSource (s, toSource (s).canPeek);
-
-function Sink #(t) toGuardedSink (snk_t s) provisos (ToSink #(snk_t, t)) =
-  guardSink (s, toSink (s).canPut);
-
-/////////////////////////////////////////////
-// Remove guard from source / sink methods //
+////////////////////////////////////
+// toUnguardedSource/Sink modules //
 ////////////////////////////////////////////////////////////////////////////////
 
 (* always_ready = "canPeek, peek, drop" *)
-module toUnguardedSource #(src_t s, t dflt) (Source #(t))
-  provisos (ToSource #(src_t, t), Bits #(t, _));
-  let src = toSource (s);
-  let peekWire <- mkDWire (dflt);
-  let dropWire <- mkPulseWire;
+module toUnguardedSource#(src_t s, t dflt)(Source#(t))
+  provisos (ToSource#(src_t, t), Bits#(t, _));
+  let src = toSource(s);
+  let peekWire    <- mkDWire(dflt);
+  let dropWire    <- mkPulseWire;
   rule setPeek; peekWire <= src.peek; endrule
   rule warnDoDrop (dropWire && !src.canPeek);
     $display("WARNING: %m - dropping from Source that can't be dropped from");
@@ -176,23 +147,44 @@ module toUnguardedSource #(src_t s, t dflt) (Source #(t))
 endmodule
 
 (* always_ready = "canPut, put" *)
-module toUnguardedSink #(snk_t s) (Sink #(t))
-  provisos (ToSink #(snk_t, t), Bits #(t, _));
-  let snk = toSink (s);
+module toUnguardedSink#(snk_t s)(Sink#(t))
+  provisos (ToSink#(snk_t, t), Bits#(t, _));
+  let snk = toSink(s);
   let putWire <- mkRWire;
-  rule warnDoPut (isValid (putWire.wget) && !snk.canPut);
+  rule warnDoPut (isValid(putWire.wget) && !snk.canPut);
     $display("WARNING: %m - putting into a Sink that can't be put into");
     //$finish(0);
   endrule
-  rule doPut (isValid (putWire.wget));
+  rule doPut (isValid(putWire.wget));
     //$display("ALLGOOD: putting in a Sink");
-    snk.put (putWire.wget.Valid);
+    snk.put(putWire.wget.Valid);
   endrule
   return interface Sink;
     method canPut = snk.canPut;
     method put    = putWire.wset;
   endinterface;
 endmodule
+
+////////////////////////////////////
+// toGuardedSource/Sink functions //
+////////////////////////////////////////////////////////////////////////////////
+
+function Source#(t) toGuardedSource(src_t s) provisos (ToSource#(src_t, t));
+  let src = toSource(s);
+  return interface Source;
+    method canPeek = src.canPeek;
+    method peek if (src.canPeek) = src.peek;
+    method drop if (src.canPeek) = src.drop;
+  endinterface;
+endfunction
+
+function Sink#(t) toGuardedSink(snk_t s) provisos (ToSink#(snk_t, t));
+  let snk = toSink(s);
+  return interface Sink;
+    method canPut = snk.canPut;
+    method put if (snk.canPut) = snk.put;
+  endinterface;
+endfunction
 
 /////////////////////////////
 // ToGet / ToPut instances //
@@ -325,6 +317,18 @@ interface Sink;
       " - ", fshow(x));
     snk.put(x);
   endaction;
+endinterface;
+
+// add a Boolean guard to a Source
+function Source#(t) guardSource (Source#(t) raw, Bool block) = interface Source;
+  method canPeek = raw.canPeek && !block;
+  method peek if (!block) = raw.peek;
+  method drop if (!block) = raw.drop;
+endinterface;
+
+function Sink#(t) guardSink (Sink#(t) raw, Bool block) = interface Sink;
+  method canPut = raw.canPut && !block;
+  method put if (!block) = raw.put;
 endinterface;
 
 endpackage
