@@ -35,14 +35,19 @@ import Connectable :: *;
 // Master / Slave interfaces //
 ////////////////////////////////////////////////////////////////////////////////
 
-interface Master#(type req, type resp);
-  interface Source#(req) source;
-  interface Sink#(resp) sink;
+interface Master #(type req, type resp);
+  interface Source #(req)  source;
+  interface Sink   #(resp) sink;
 endinterface
 
-interface Slave#(type req, type resp);
-  interface Source#(resp) source;
-  interface Sink#(req) sink;
+interface Slave #(type req, type resp);
+  interface Source #(resp) source;
+  interface Sink   #(req)  sink;
+endinterface
+
+interface MasterSlave #(type req, type resp);
+  interface Master #(req, resp) master;
+  interface Slave  #(req, resp) slave;
 endinterface
 
 ///////////////////////////

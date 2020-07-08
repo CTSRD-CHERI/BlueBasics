@@ -50,6 +50,11 @@ interface Sink#(type t);
    method Action put(t val);
 endinterface
 
+interface SourceSink #(type t);
+  interface Source #(t) source;
+  interface Sink   #(t) sink;
+endinterface
+
 //////////////////////
 // HasGet typeclass //
 ////////////////////////////////////////////////////////////////////////////////
