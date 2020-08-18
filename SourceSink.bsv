@@ -35,6 +35,10 @@ import SpecialFIFOs :: *;
 import GetPut :: *;
 import Connectable :: *;
 
+`ifdef PERFORMANCE_MONITORING
+import PerformanceMonitor :: *;
+`endif
+
 //////////////////////////////
 // Source / Sink interfaces //
 ////////////////////////////////////////////////////////////////////////////////
@@ -336,4 +340,29 @@ function Sink#(t) guardSink (Sink#(t) raw, Bool block) = interface Sink;
   method put if (!block) = raw.put;
 endinterface;
 
+`ifdef PERFORMANCE_MONITORING
+module perfSource#(Source#(t) s)(Monitored#(Source#(t), Bit#(1)));
+  Wire#(Bit#(1)) evt <- mkDWire(0);
+  interface mdle = interface Source;
+    method canPeek = s.canPeek;
+    method peek = s.peek;
+    method drop = action
+      s.drop;
+      evt <= 1;
+    endaction;
+  endinterface;
+  method events = evt;
+endmodule
+module perfSink#(Sink#(t) s)(Monitored#(Sink#(t), Bit#(1)));
+  Wire#(Bit#(1)) evt <- mkDWire(0);
+  interface mdle = interface Sink;
+    method canPut = s.canPut;
+    method put (x) = action
+      s.put(x);
+      evt <= 1;
+    endaction;
+  endinterface;
+  method events = evt;
+endmodule
+`endif
 endpackage
