@@ -75,8 +75,12 @@ function Tuple2#(List#(a), List#(a)) splitAt(Integer n, List#(a) xs) =
 function List#(a) concatMap(function List#(a) f(a x), List#(a) xs) =
   concat(map(f, xs));
 
-function List#(a) rotateBy(Integer n, List#(a) xs) =
-  append(drop(n, xs), take(n, xs));
+//function List#(a) rotateBy(Integer n, List#(a) xs) =
+//  append(drop(n, xs), take(n, xs));
+function List#(a) rotateBy(Integer n, List#(a) xs);
+  for (Integer i = 0; i < n; i = i + 1) xs = rotate(xs);
+  return xs;
+endfunction
 
 function List#(a) rotateRBy(Integer n, List#(a) xs) =
   reverse(rotateBy(n, reverse(xs)));
@@ -101,15 +105,23 @@ endfunction
 function List#(Bool) oneHotList(Integer sz, Integer idx) =
   rotateRBy(idx, cons(True, replicate(sz-1, False)));
 
+//function List#(a) oneHotRotateBy(List#(Bool) xs, List#(a) ys)
+//  provisos (Bits#(a, a_sz));
+//  Integer n = length(xs);
+//  List#(a) outList = Nil;
+//  for (Integer i = 0; i < n; i = i + 1) begin
+//    xs = rotateR(xs);
+//    outList = cons(oneHotSelect(xs, ys), outList);
+//  end
+//  return reverse(outList);
+//endfunction
+
 function List#(a) oneHotRotateBy(List#(Bool) xs, List#(a) ys)
   provisos (Bits#(a, a_sz));
   Integer n = length(xs);
-  List#(a) outList = Nil;
-  for (Integer i = 0; i < n; i = i + 1) begin
-    xs = rotateR(xs);
-    outList = cons(oneHotSelect(xs, ys), outList);
-  end
-  return reverse(outList);
+  Integer r = 0;
+  for (Integer i = 0; i < n; i = i + 1) if (xs[i]) r = n - (i + 1);
+  return rotateBy(r, ys);
 endfunction
 
 function List#(a) oneHotRotateRBy(List#(Bool) xs, List#(a) ys)
