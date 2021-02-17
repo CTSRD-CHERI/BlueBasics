@@ -125,72 +125,6 @@ function Sink #(b) mapSink ( function a f (b x)
   method put (x) = snk.put (f (x));
 endinterface;
 
-////////////////////////////////////
-// toUnguardedSource/Sink modules //
-////////////////////////////////////////////////////////////////////////////////
-
-(* always_ready = "canPeek, peek, drop" *)
-module toUnguardedSource#(src_t s, t dflt)(Source#(t))
-  provisos (ToSource#(src_t, t), Bits#(t, _));
-  let src = toSource(s);
-  let peekWire    <- mkDWire(dflt);
-  let dropWire    <- mkPulseWire;
-  rule setPeek; peekWire <= src.peek; endrule
-  rule warnDoDrop (dropWire && !src.canPeek);
-    $display("WARNING: %m - dropping from Source that can't be dropped from");
-    //$finish(0);
-  endrule
-  rule doDrop (dropWire && src.canPeek);
-    //$display("ALLGOOD: dropping from Source");
-    src.drop;
-  endrule
-  return interface Source;
-    method canPeek = src.canPeek;
-    method peek    = peekWire;
-    method drop    = dropWire.send;
-  endinterface;
-endmodule
-
-(* always_ready = "canPut, put" *)
-module toUnguardedSink#(snk_t s)(Sink#(t))
-  provisos (ToSink#(snk_t, t), Bits#(t, _));
-  let snk = toSink(s);
-  let putWire <- mkRWire;
-  rule warnDoPut (isValid(putWire.wget) && !snk.canPut);
-    $display("WARNING: %m - putting into a Sink that can't be put into");
-    //$finish(0);
-  endrule
-  rule doPut (isValid(putWire.wget));
-    //$display("ALLGOOD: putting in a Sink");
-    snk.put(putWire.wget.Valid);
-  endrule
-  return interface Sink;
-    method canPut = snk.canPut;
-    method put    = putWire.wset;
-  endinterface;
-endmodule
-
-////////////////////////////////////
-// toGuardedSource/Sink functions //
-////////////////////////////////////////////////////////////////////////////////
-
-function Source#(t) toGuardedSource(src_t s) provisos (ToSource#(src_t, t));
-  let src = toSource(s);
-  return interface Source;
-    method canPeek = src.canPeek;
-    method peek if (src.canPeek) = src.peek;
-    method drop if (src.canPeek) = src.drop;
-  endinterface;
-endfunction
-
-function Sink#(t) toGuardedSink(snk_t s) provisos (ToSink#(snk_t, t));
-  let snk = toSink(s);
-  return interface Sink;
-    method canPut = snk.canPut;
-    method put if (snk.canPut) = snk.put;
-  endinterface;
-endfunction
-
 /////////////////////////////
 // ToGet / ToPut instances //
 ////////////////////////////////////////////////////////////////////////////////
@@ -268,6 +202,65 @@ instance Connectable#(Get#(t), Sink#(t));
 endinstance
 */
 
+////////////////////////////////////
+// toUnguardedSource/Sink modules //
+////////////////////////////////////////////////////////////////////////////////
+
+(* always_ready = "canPeek, peek, drop" *)
+module toUnguardedSource#(src_t s, t dflt)(Source#(t))
+  provisos (ToSource#(src_t, t), Bits#(t, _));
+  let src = toSource(s);
+  let peekWire    <- mkDWire(dflt);
+  let dropWire    <- mkPulseWire;
+  rule setPeek; peekWire <= src.peek; endrule
+  rule warnDoDrop (dropWire && !src.canPeek);
+    $display("WARNING: %m - dropping from Source that can't be dropped from");
+    //$finish(0);
+  endrule
+  rule doDrop (dropWire && src.canPeek);
+    //$display("ALLGOOD: dropping from Source");
+    src.drop;
+  endrule
+  return interface Source;
+    method canPeek = src.canPeek;
+    method peek    = peekWire;
+    method drop    = dropWire.send;
+  endinterface;
+endmodule
+
+(* always_ready = "canPut, put" *)
+module toUnguardedSink#(snk_t s)(Sink#(t))
+  provisos (ToSink#(snk_t, t), Bits#(t, _));
+  let snk = toSink(s);
+  let putWire <- mkRWire;
+  rule warnDoPut (isValid(putWire.wget) && !snk.canPut);
+    $display("WARNING: %m - putting into a Sink that can't be put into");
+    //$finish(0);
+  endrule
+  rule doPut (isValid(putWire.wget));
+    //$display("ALLGOOD: putting in a Sink");
+    snk.put(putWire.wget.Valid);
+  endrule
+  return interface Sink;
+    method canPut = snk.canPut;
+    method put    = putWire.wset;
+  endinterface;
+endmodule
+
+////////////////////////////////////
+// toGuardedSource/Sink functions //
+////////////////////////////////////////////////////////////////////////////////
+
+function Source#(t) toGuardedSource(src_t s) provisos (ToSource#(src_t, t));
+  let src = toSource(s);
+  return guardSource(src, !src.canPeek);
+endfunction
+
+function Sink#(t) toGuardedSink(snk_t s) provisos (ToSink#(snk_t, t));
+  let snk = toSink(s);
+  return guardSink(snk, !snk.canPut);
+endfunction
+
 ///////////
 // Shims //
 ////////////////////////////////////////////////////////////////////////////////
@@ -283,6 +276,33 @@ module mkGetToSource#(Get#(t) get)(Source#(t)) provisos (Bits#(t, t_sz));
   mkConnection(get, toPut(ff));
   return toSource(ff);
 endmodule
+
+////////////////////////////////////////
+// augment source/sink with an action //
+////////////////////////////////////////////////////////////////////////////////
+
+function Source#(t) onDrop(src_t s, Action act) provisos (ToSource#(src_t, t));
+  let src = toSource(s);
+  return interface Source;
+    method canPeek = src.canPeek;
+    method peek = src.peek;
+    method drop = action src.drop; act; endaction;
+  endinterface;
+endfunction
+
+// Note: if a simple action with no argument is desired, consider using a
+//       partially applied call to constFn as the second argument to onPut
+function Sink#(t) onPut(snk_t s, function Action f (t x))
+  provisos (ToSink#(snk_t, t));
+  let snk = toSink(s);
+  return interface Sink;
+    method canPut = snk.canPut;
+    method put(x) = action
+      snk.put(x);
+      f(x);
+    endaction;
+  endinterface;
+endfunction
 
 /////////////////////////////
 // helpers and other utils //
@@ -302,27 +322,16 @@ endinterface;
 
 // debug wrapping
 function Source#(t) debugSource(Source#(t) src, Fmt msg) provisos (FShow#(t)) =
-interface Source;
-  method canPeek = src.canPeek;
-  method peek = src.peek;
-  method drop = action
-    $display(msg,
-      " - Source drop method called - canPeek: ", fshow(src.canPeek),
-      " - ", fshow(src.peek));
-    src.drop;
-  endaction;
-endinterface;
+  onDrop(src, $display( msg, " - Source drop method called - canPeek: "
+                      , fshow(src.canPeek), " - ", fshow(src.peek)));
 
-function Sink#(t) debugSink(Sink#(t) snk, Fmt msg) provisos (FShow#(t)) =
-interface Sink;
-  method canPut = snk.canPut;
-  method put(x) = action
-    $display(msg,
-      " - Sink put method called - canPut: ", fshow(snk.canPut),
-      " - ", fshow(x));
-    snk.put(x);
+function Sink#(t) debugSink(Sink#(t) snk, Fmt msg) provisos (FShow#(t));
+  function f (x) = action
+    $display( msg, " - Sink put method called - canPut: ", fshow(snk.canPut)
+            , " - ", fshow(x));
   endaction;
-endinterface;
+  return onPut(snk, f);
+endfunction
 
 // add a Boolean guard to a Source
 function Source#(t) guardSource (Source#(t) raw, Bool block) = interface Source;
