@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2018-2019 Alexandre Joannou
+ * Copyright (c) 2018-2021 Alexandre Joannou
  * Copyright (c) 2019 Peter Rugg
  * Copyright (c) 2019 Jonathan Woodruff
  * All rights reserved.
@@ -281,12 +281,13 @@ endmodule
 // augment source/sink with an action //
 ////////////////////////////////////////////////////////////////////////////////
 
-function Source#(t) onDrop(src_t s, Action act) provisos (ToSource#(src_t, t));
+function Source#(t) onDrop(src_t s, function Action f (t x))
+  provisos (ToSource#(src_t, t));
   let src = toSource(s);
   return interface Source;
     method canPeek = src.canPeek;
     method peek = src.peek;
-    method drop = action src.drop; act; endaction;
+    method drop = action src.drop; f(src.peek); endaction;
   endinterface;
 endfunction
 
@@ -297,10 +298,7 @@ function Sink#(t) onPut(snk_t s, function Action f (t x))
   let snk = toSink(s);
   return interface Sink;
     method canPut = snk.canPut;
-    method put(x) = action
-      snk.put(x);
-      f(x);
-    endaction;
+    method put(x) = action snk.put(x); f(x); endaction;
   endinterface;
 endfunction
 
@@ -322,8 +320,8 @@ endinterface;
 
 // debug wrapping
 function Source#(t) debugSource(Source#(t) src, Fmt msg) provisos (FShow#(t)) =
-  onDrop(src, $display( msg, " - Source drop method called - canPeek: "
-                      , fshow(src.canPeek), " - ", fshow(src.peek)));
+  onDrop(src, constFn($display( msg, " - Source drop method called - canPeek: "
+                              , fshow(src.canPeek), " - ", fshow(src.peek))));
 
 function Sink#(t) debugSink(Sink#(t) snk, Fmt msg) provisos (FShow#(t));
   function f (x) = action
