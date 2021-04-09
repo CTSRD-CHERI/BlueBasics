@@ -210,19 +210,21 @@ endinstance
 module toUnguardedSource#(src_t s, t dflt)(Source#(t))
   provisos (ToSource#(src_t, t), Bits#(t, _));
   let src = toSource(s);
-  let peekWire    <- mkDWire(dflt);
-  let dropWire    <- mkPulseWire;
+  let canPeekWire <- mkDWire(False);
+  let peekWire <- mkDWire(dflt);
+  let dropWire <- mkPulseWire;
+  rule setCanPeek; canPeekWire <= src.canPeek; endrule
   rule setPeek; peekWire <= src.peek; endrule
-  rule warnDoDrop (dropWire && !src.canPeek);
+  rule warnDoDrop (dropWire && !canPeekWire);
     $display("WARNING: %m - dropping from Source that can't be dropped from");
     //$finish(0);
   endrule
-  rule doDrop (dropWire && src.canPeek);
+  rule doDrop (dropWire && canPeekWire);
     //$display("ALLGOOD: dropping from Source");
     src.drop;
   endrule
   return interface Source;
-    method canPeek = src.canPeek;
+    method canPeek = canPeekWire;
     method peek    = peekWire;
     method drop    = dropWire.send;
   endinterface;
