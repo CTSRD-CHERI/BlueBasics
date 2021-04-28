@@ -310,6 +310,13 @@ endfunction
 // helpers and other utils //
 ////////////////////////////////////////////////////////////////////////////////
 
+// constant source
+function Source#(t) constSource (t x) = interface Source;
+  method canPeek = True;
+  method peek if (True) = x;
+  method drop if (True) = noAction;
+endinterface;
+
 // null sources / sinks
 function Source#(t) nullSource = interface Source;
   method canPeek = False;
@@ -321,6 +328,70 @@ function Sink#(t) nullSink = interface Sink;
   method canPut = True;
   method put(x) = noAction;
 endinterface;
+
+function Source#(Tuple2#(t0, t1)) mergeSources (Source#(t0) s0, Source#(t1) s1);
+  let newGuard = s0.canPeek && s1.canPeek;
+  return interface Source;
+    method canPeek = newGuard;
+    method peek if (newGuard) = tuple2(s0.peek, s1.peek);
+    method drop if (newGuard) = action
+      s0.drop;
+      s1.drop;
+    endaction;
+  endinterface;
+endfunction
+
+module splitSource #(Source#(Tuple2#(t0, t1)) s)
+                   (Tuple2#(Source#(t0), Source#(t1)))
+  provisos (Bits #(t0, t0Sz), Bits #(t1, t1Sz));
+  let ff0 <- mkBypassFIFOF;
+  let ff1 <- mkBypassFIFOF;
+  rule forwardData;
+    match {.x0, .x1} <- get (s);
+    ff0.enq(x0);
+    ff1.enq(x1);
+  endrule
+  return tuple2 (toSource (ff0), toSource (ff1));
+endmodule
+
+function Sink#(Tuple2#(t0, t1)) mergeSinks (Sink#(t0) s0, Sink#(t1) s1);
+  let newGuard = s0.canPut && s1.canPut;
+  return interface Sink;
+    method canPut = newGuard;
+    method put (x) if (newGuard) = action
+      match {.x0, .x1} = x;
+      s0.put(x0);
+      s1.put(x1);
+    endaction;
+  endinterface;
+endfunction
+
+module splitSink #(Sink#(Tuple2#(t0, t1)) s)
+                 (Tuple2#(Sink#(t0), Sink#(t1)))
+  provisos (Bits #(t0, t0Sz), Bits #(t1, t1Sz));
+  let ff0 <- mkBypassFIFOF;
+  let ff1 <- mkBypassFIFOF;
+  rule forwardData;
+    s.put(tuple2(ff0.first, ff1.first));
+    ff0.deq;
+    ff1.deq;
+  endrule
+  return tuple2 (toSink (ff0), toSink (ff1));
+endmodule
+
+module mkReqRspPre #( function module #(FIFOF#(rspT)) mkFF
+                    , function rspT f (reqT req) )
+                   (Tuple2#(Sink#(reqT), Source#(rspT)));
+  let ff <- mkFF;
+  return tuple2 (mapSink (f, toSink (ff)), toSource (ff));
+endmodule
+
+module mkReqRspPost #( function module #(FIFOF#(reqT)) mkFF
+                     , function rspT f (reqT req) )
+                    (Tuple2#(Sink#(reqT), Source#(rspT)));
+  let ff <- mkFF;
+  return tuple2 (toSink (ff), mapSource (f, toSource (ff)));
+endmodule
 
 // debug wrapping
 function Source#(t) debugSource(Source#(t) src, Fmt msg) provisos (FShow#(t)) =
