@@ -234,7 +234,9 @@ endmodule
 module toUnguardedSink#(snk_t s)(Sink#(t))
   provisos (ToSink#(snk_t, t), Bits#(t, _));
   let snk = toSink(s);
+  let canPutWire <- mkDWire(False);
   let putWire <- mkRWire;
+  rule setCanPut; canPutWire <= snk.canPut; endrule
   rule warnDoPut (isValid(putWire.wget) && !snk.canPut);
     $display("WARNING: %m - putting into a Sink that can't be put into");
     //$finish(0);
@@ -244,7 +246,7 @@ module toUnguardedSink#(snk_t s)(Sink#(t))
     snk.put(putWire.wget.Valid);
   endrule
   return interface Sink;
-    method canPut = snk.canPut;
+    method canPut = canPutWire;
     method put    = putWire.wset;
   endinterface;
 endmodule
