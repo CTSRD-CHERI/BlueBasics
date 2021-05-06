@@ -285,7 +285,7 @@ endmodule
 // augment source/sink with an action //
 ////////////////////////////////////////////////////////////////////////////////
 
-function Source#(t) onDrop(src_t s, function Action f (t x))
+function Source #(t) onDrop (function Action f (t x), src_t s)
   provisos (ToSource#(src_t, t));
   let src = toSource(s);
   return interface Source;
@@ -296,8 +296,8 @@ function Source#(t) onDrop(src_t s, function Action f (t x))
 endfunction
 
 // Note: if a simple action with no argument is desired, consider using a
-//       partially applied call to constFn as the second argument to onPut
-function Sink#(t) onPut(snk_t s, function Action f (t x))
+//       partially applied call to constFn as the first argument to onPut
+function Sink #(t) onPut (function Action f (t x), snk_t s)
   provisos (ToSink#(snk_t, t));
   let snk = toSink(s);
   return interface Sink;
@@ -395,15 +395,16 @@ endmodule
 
 // debug wrapping
 function Source#(t) debugSource(Source#(t) src, Fmt msg) provisos (FShow#(t)) =
-  onDrop(src, constFn($display( msg, " - Source drop method called - canPeek: "
-                              , fshow(src.canPeek), " - ", fshow(src.peek))));
+  onDrop( constFn ($display ( msg, " - Source drop method called - canPeek: "
+                            , fshow (src.canPeek), " - ", fshow (src.peek)))
+        , src );
 
 function Sink#(t) debugSink(Sink#(t) snk, Fmt msg) provisos (FShow#(t));
   function f (x) = action
     $display( msg, " - Sink put method called - canPut: ", fshow(snk.canPut)
             , " - ", fshow(x));
   endaction;
-  return onPut(snk, f);
+  return onPut (f, snk);
 endfunction
 
 // add a Boolean guard to a Source
