@@ -120,7 +120,7 @@ function List#(a) oneHotRotateBy(List#(Bool) xs, List#(a) ys)
   provisos (Bits#(a, a_sz));
   Integer n = length(xs);
   Integer r = 0;
-  for (Integer i = 0; i < n; i = i + 1) if (xs[i]) r = n - (i + 1);
+  for (Integer i = 0; i < n; i = i + 1) if (xs[i]) r = i + 1;
   return rotateBy(r, ys);
 endfunction
 
