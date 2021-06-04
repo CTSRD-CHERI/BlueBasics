@@ -37,13 +37,13 @@ export list;
 export MkList;
 export splitAt;
 export concatMap;
-export rotateBy;
+export rotateLBy;
 export rotateRBy;
 export bitToList;
 export listToBit;
 export oneHotList;
-export oneHotRotateBy;
-export oneHotRotateRBy;
+export oneHotRotateToEnd;
+export oneHotRotateFromEnd;
 export firstHotToOneHot;
 export findOneHotWith;
 
@@ -75,15 +75,17 @@ function Tuple2#(List#(a), List#(a)) splitAt(Integer n, List#(a) xs) =
 function List#(a) concatMap(function List#(a) f(a x), List#(a) xs) =
   concat(map(f, xs));
 
-//function List#(a) rotateBy(Integer n, List#(a) xs) =
+function List #(a) rotateL (List #(a) xs) = rotate(xs);
+
+//function List#(a) rotateLBy(Integer n, List#(a) xs) =
 //  append(drop(n, xs), take(n, xs));
-function List#(a) rotateBy(Integer n, List#(a) xs);
-  for (Integer i = 0; i < n; i = i + 1) xs = rotate(xs);
+function List#(a) rotateLBy(Integer n, List#(a) xs);
+  for (Integer i = 0; i < n; i = i + 1) xs = rotateL(xs);
   return xs;
 endfunction
 
 function List#(a) rotateRBy(Integer n, List#(a) xs) =
-  reverse(rotateBy(n, reverse(xs)));
+  reverse(rotateLBy(n, reverse(xs)));
 
 function List#(Bool) bitToList(Bit#(n) x);
   List#(Bool) outList = Nil;
@@ -105,7 +107,7 @@ endfunction
 function List#(Bool) oneHotList(Integer sz, Integer idx) =
   rotateRBy(idx, cons(True, replicate(sz-1, False)));
 
-//function List#(a) oneHotRotateBy(List#(Bool) xs, List#(a) ys)
+//function List#(a) oneHotRotateToEnd(List#(Bool) xs, List#(a) ys)
 //  provisos (Bits#(a, a_sz));
 //  Integer n = length(xs);
 //  List#(a) outList = Nil;
@@ -116,16 +118,21 @@ function List#(Bool) oneHotList(Integer sz, Integer idx) =
 //  return reverse(outList);
 //endfunction
 
-function List#(a) oneHotRotateBy(List#(Bool) xs, List#(a) ys)
+// Rotate ys such that the element at the end of ys becomes the element with
+// the same index as the one-hot value in xs
+function List#(a) oneHotRotateToEnd(List#(Bool) xs, List#(a) ys)
   provisos (Bits#(a, a_sz));
   Integer n = length(xs);
   Integer r = 0;
   for (Integer i = 0; i < n; i = i + 1) if (xs[i]) r = i + 1;
-  return rotateBy(r, ys);
+  return rotateLBy(r, ys);
 endfunction
 
-function List#(a) oneHotRotateRBy(List#(Bool) xs, List#(a) ys)
-  provisos (Bits#(a, a_sz)) = reverse(oneHotRotateBy(xs, reverse(ys)));
+// The inverse of oneHotRotateToEnd
+// Rotate ys such that the element at the end of ys is moved to the index
+// at which xs has its one-hot value
+function List#(a) oneHotRotateFromEnd(List#(Bool) xs, List#(a) ys)
+  provisos (Bits#(a, a_sz)) = reverse(oneHotRotateToEnd(xs, reverse(ys)));
 
 function Maybe#(List#(Bool)) firstHotToOneHot(List#(Bool) xs);
   List#(Bool) outList = Nil;
