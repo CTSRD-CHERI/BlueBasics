@@ -37,11 +37,13 @@ export MkList;
 export splitAt;
 export concatMap;
 export rotateBy;
+export rotateLBy;
 export rotateRBy;
 export bitToList;
 export listToBit;
 export oneHotList;
 export oneHotRotateBy;
+export oneHotRotateLBy;
 export oneHotRotateRBy;
 export firstHotToOneHot;
 export findOneHotWith;
@@ -74,15 +76,23 @@ function Tuple2 #(List #(a), List #(a)) splitAt (Integer n, List #(a) xs) =
 function List #(a) concatMap (function List #(a) f (a x), List #(a) xs) =
   concat (map (f, xs));
 
-//function List #(a) rotateBy (Integer n, List #(a) xs) =
-//  append (drop (n, xs), take (n, xs));
-function List #(a) rotateBy (Integer n, List #(a) xs);
-  for (Integer i = 0; i < n; i = i + 1) xs = rotate (xs);
+// Note: the rotate functions in this file follow the convention used by
+// the BSV reference guide - that is, rotating "left" means rotating elements
+// towards lower indices, and rotating "right" means rotating elements towards
+// higher indices
+function List #(a) rotateL (List #(a) xs) = rotate(xs);
+
+//function List#(a) rotateLBy(Integer n, List#(a) xs) =
+//  append(drop(n, xs), take(n, xs));
+function List#(a) rotateLBy(Integer n, List#(a) xs);
+  for (Integer i = 0; i < n; i = i + 1) xs = rotateL(xs);
   return xs;
 endfunction
 
-function List #(a) rotateRBy (Integer n, List #(a) xs) =
-  reverse (rotateBy (n, reverse (xs)));
+function List#(a) rotateBy(Integer n, List#(a) xs) = rotateLBy (n, xs);
+
+function List#(a) rotateRBy(Integer n, List#(a) xs) =
+  reverse(rotateLBy(n, reverse(xs)));
 
 function List #(Bool) bitToList (Bit #(n) x);
   List #(Bool) outList = Nil;
@@ -104,10 +114,10 @@ endfunction
 function List #(Bool) oneHotList (Integer sz, Integer idx) =
   rotateRBy (idx, cons (True, replicate (sz - 1, False)));
 
-//function List #(a) oneHotRotateBy (List #(Bool) xs, List #(a) ys)
-//  provisos (Bits #(a, a_sz));
-//  Integer n = length (xs);
-//  List #(a) outList = Nil;
+//function List#(a) oneHotRotateLBy(List#(Bool) xs, List#(a) ys)
+//  provisos (Bits#(a, a_sz));
+//  Integer n = length(xs);
+//  List#(a) outList = Nil;
 //  for (Integer i = 0; i < n; i = i + 1) begin
 //    xs = rotateR (xs);
 //    outList = cons (oneHotSelect (xs, ys), outList);
@@ -115,16 +125,33 @@ function List #(Bool) oneHotList (Integer sz, Integer idx) =
 //  return reverse (outList);
 //endfunction
 
-function List #(a) oneHotRotateBy (List #(Bool) xs, List #(a) ys)
-  provisos (Bits #(a, a_sz));
-  Integer n = length (xs);
+// There are two interpretations for this function:
+//  * If xs is taken to be an integer which is encoded in a one-hot list (where
+//    a True value in index 0 indicates an integer value of 1), this function
+//    will rotate ys left by the integer xs.
+//  * If xs is taken to be a simple one-hot List of Bools, this function will
+//    rotate ys such that the last element of the returned List will be the one
+//    which in the input has the same index as the True value in xs.
+function List#(a) oneHotRotateLBy(List#(Bool) xs, List#(a) ys)
+  provisos (Bits#(a, a_sz));
+  Integer n = length(xs);
   Integer r = 0;
-  for (Integer i = 0; i < n; i = i + 1) if (xs[i]) r = n - (i + 1);
-  return rotateBy (r, ys);
+  for (Integer i = 0; i < n; i = i + 1) if (xs[i]) r = i + 1;
+  return rotateLBy(r, ys);
 endfunction
 
-function List #(a) oneHotRotateRBy (List #(Bool) xs, List #(a) ys)
-  provisos (Bits #(a, a_sz)) = reverse (oneHotRotateBy (xs, reverse (ys)));
+function List#(a) oneHotRotateLBy(List#(Bool) xs, List#(a) ys) =
+  oneHotRotateBy (xs, ys);
+
+// The inverse of oneHotRotateLBy
+// There are two interpretations for this function, as with oneHotRotateLBy:
+//  * When xs encodes an integer, we rotate to the right by the input integer
+//    xs
+//  * When xs does not encode an integer, we rotate such that the element at
+//    the end of ys is moved to have the same index as the True value in the
+//    one-hot xs
+function List#(a) oneHotRotateRBy(List#(Bool) xs, List#(a) ys)
+  provisos (Bits#(a, a_sz)) = reverse(oneHotRotateLBy(xs, reverse(ys)));
 
 function Maybe #(List #(Bool)) firstHotToOneHot (List #(Bool) xs);
   List #(Bool) outList = Nil;
