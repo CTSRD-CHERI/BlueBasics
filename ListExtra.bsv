@@ -42,8 +42,8 @@ export rotateRBy;
 export bitToList;
 export listToBit;
 export oneHotList;
-export oneHotRotateToEnd;
-export oneHotRotateFromEnd;
+export oneHotRotateLBy;
+export oneHotRotateRBy;
 export firstHotToOneHot;
 export findOneHotWith;
 
@@ -107,7 +107,7 @@ endfunction
 function List#(Bool) oneHotList(Integer sz, Integer idx) =
   rotateRBy(idx, cons(True, replicate(sz-1, False)));
 
-//function List#(a) oneHotRotateToEnd(List#(Bool) xs, List#(a) ys)
+//function List#(a) oneHotRotateLBy(List#(Bool) xs, List#(a) ys)
 //  provisos (Bits#(a, a_sz));
 //  Integer n = length(xs);
 //  List#(a) outList = Nil;
@@ -118,9 +118,14 @@ function List#(Bool) oneHotList(Integer sz, Integer idx) =
 //  return reverse(outList);
 //endfunction
 
-// Rotate ys such that the element at the end of ys becomes the element with
-// the same index as the one-hot value in xs
-function List#(a) oneHotRotateToEnd(List#(Bool) xs, List#(a) ys)
+// There are two interpretations for this function:
+//  * If xs is taken to be an integer which is encoded in a one-hot list (where
+//    a True value in index 0 indicates an integer value of 1), this function
+//    will rotate ys left by the integer xs.
+//  * If xs is taken to be a simple one-hot List of Bools, this function will
+//    rotate ys such that the last element of the returned List will be the one
+//    which in the input has the same index as the True value in xs.
+function List#(a) oneHotRotateLBy(List#(Bool) xs, List#(a) ys)
   provisos (Bits#(a, a_sz));
   Integer n = length(xs);
   Integer r = 0;
@@ -128,11 +133,15 @@ function List#(a) oneHotRotateToEnd(List#(Bool) xs, List#(a) ys)
   return rotateLBy(r, ys);
 endfunction
 
-// The inverse of oneHotRotateToEnd
-// Rotate ys such that the element at the end of ys is moved to the index
-// at which xs has its one-hot value
-function List#(a) oneHotRotateFromEnd(List#(Bool) xs, List#(a) ys)
-  provisos (Bits#(a, a_sz)) = reverse(oneHotRotateToEnd(xs, reverse(ys)));
+// The inverse of oneHotRotateLBy
+// There are two interpretations for this function, as with oneHotRotateLBy:
+//  * When xs encodes an integer, we rotate to the right by the input integer
+//    xs
+//  * When xs does not encode an integer, we rotate such that the element at
+//    the end of ys is moved to have the same index as the True value in the
+//    one-hot xs
+function List#(a) oneHotRotateRBy(List#(Bool) xs, List#(a) ys)
+  provisos (Bits#(a, a_sz)) = reverse(oneHotRotateLBy(xs, reverse(ys)));
 
 function Maybe#(List#(Bool)) firstHotToOneHot(List#(Bool) xs);
   List#(Bool) outList = Nil;
