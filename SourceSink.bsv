@@ -395,14 +395,14 @@ endmodule
 
 // debug wrapping
 function Source#(t) debugSource(Source#(t) src, Fmt msg) provisos (FShow#(t)) =
-  onDrop( constFn ($display ( msg, " - Source drop method called - canPeek: "
-                            , fshow (src.canPeek), " - ", fshow (src.peek)))
+  onDrop( constFn ($display ( msg
+                            , " - Source drop method called - "
+                            , fshow (src.peek)))
         , src );
 
 function Sink#(t) debugSink(Sink#(t) snk, Fmt msg) provisos (FShow#(t));
   function f (x) = action
-    $display( msg, " - Sink put method called - canPut: ", fshow(snk.canPut)
-            , " - ", fshow(x));
+    $display( msg, " - Sink put method called - ", fshow(x));
   endaction;
   return onPut (f, snk);
 endfunction
