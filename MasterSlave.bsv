@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2018-2019 Alexandre Joannou
+ * Copyright (c) 2018-2021 Alexandre Joannou
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -26,6 +26,11 @@
  * @BERI_LICENSE_HEADER_END@
  */
 
+// This package provides a 'Master' and a 'Slave' interface, similar to the
+// 'Client' and 'Server' interfaces from the standard Bluespec library, but
+// using 'Source' and 'Sink' in place of the standard 'Get' and 'Put' underlying
+// interfaces (e.g. 'Master' and 'Slave' offer explicit flow control methods).
+
 package MasterSlave;
 
 import SourceSink :: *;
@@ -35,66 +40,68 @@ import Connectable :: *;
 // Master / Slave interfaces //
 ////////////////////////////////////////////////////////////////////////////////
 
-interface Master #(type req, type resp);
-  interface Source #(req)  source;
-  interface Sink   #(resp) sink;
+// A 'Master' is a source of requests and a sink for responses
+interface Master #(type req_t, type rsp_t);
+  interface Source #(req_t) req;
+  interface Sink   #(rsp_t) rsp;
 endinterface
 
-interface Slave #(type req, type resp);
-  interface Source #(resp) source;
-  interface Sink   #(req)  sink;
-endinterface
-
-interface MasterSlave #(type req, type resp);
-  interface Master #(req, resp) master;
-  interface Slave  #(req, resp) slave;
+// A 'Slave' is a sink for requests and a source of responses
+interface Slave #(type req_t, type rsp_t);
+  interface Sink   #(req_t) req;
+  interface Source #(rsp_t) rsp;
 endinterface
 
 ///////////////////////////
 // Connectable instances //
 ////////////////////////////////////////////////////////////////////////////////
+// Simply connect a 'Master' 's request source to a 'Slave' 's request sink,
+// and a 'Slave' 's response source to a 'Master' 's response sink
 
-instance Connectable#(Master#(req, resp), Slave#(req, resp))
-  provisos (Bits#(req, req_sz), Bits#(resp, resp_sz));
-  module mkConnection#(Master#(req, resp) m, Slave#(req, resp) s)(Empty);
-    mkConnection(m.source, s.sink);
-    mkConnection(s.source, m.sink);
+instance Connectable #(Master #(req_t, rsp_t), Slave #(req_t, rsp_t))
+  provisos (Bits #(req_t, _a), Bits #(rsp_t, _b));
+  module mkConnection #(Master #(req_t, rsp_t) m, Slave #(req_t, rsp_t) s)
+                       (Empty);
+    mkConnection (m.req, s.req);
+    mkConnection (m.rsp, s.rsp);
   endmodule
 endinstance
 
-instance Connectable#(Slave#(req, resp), Master#(req, resp))
-  provisos (Bits#(req, req_sz), Bits#(resp, resp_sz));
-  module mkConnection#(Slave#(req, resp) s, Master#(req, resp) m)(Empty);
-    mkConnection(m.source, s.sink);
-    mkConnection(s.source, m.sink);
+instance Connectable #(Slave #(req_t, rsp_t), Master #(req_t, rsp_t))
+  provisos (Bits #(req_t, _a), Bits #(rsp_t, _b));
+  module mkConnection #(Slave #(req_t, rsp_t) s, Master #(req_t, rsp_t) m)
+                       (Empty);
+    mkConnection (s.req, m.req);
+    mkConnection (s.rsp, m.rsp);
   endmodule
 endinstance
 
 ///////////
 // Debug //
 ////////////////////////////////////////////////////////////////////////////////
+// simple debug utilities using the underlying 'debugSource' and 'debugSink'
+// functions which print provided messages on source drop / sink put
 
-function Master#(req, resp) debugMaster(Master#(req, resp) m, Fmt msg)
-  provisos (FShow#(req), FShow#(resp)) =
-  interface Master;
-    interface source = debugSource(m.source, msg);
-    interface sink   = debugSink(m.sink, msg);
+function Master #(req_t, rsp_t) debugMaster (Master #(req_t, rsp_t) m, Fmt msg)
+  provisos (FShow #(req_t), FShow #(rsp_t)) = interface Master;
+    interface req = debugSource (m.req, msg);
+    interface rsp = debugSink   (m.rsp, msg);
   endinterface;
 
-function Slave#(req, resp) debugSlave(Slave#(req, resp) s, Fmt msg)
-  provisos (FShow#(req), FShow#(resp)) =
-  interface Slave;
-    interface source = debugSource(s.source, msg);
-    interface sink   = debugSink(s.sink, msg);
+function Slave #(req_t, rsp_t) debugSlave (Slave #(req_t, rsp_t) s, Fmt msg)
+  provisos (FShow #(req_t), FShow #(rsp_t)) = interface Slave;
+    interface req = debugSink   (s.req, msg);
+    interface rsp = debugSource (s.rsp, msg);
   endinterface;
 
 ///////////
 // Utils //
 ////////////////////////////////////////////////////////////////////////////////
 // Get desired Master / Slave sub-interface
-function Source#(a) getMasterSource (Master#(a, b) m) = m.source;
-function Sink#(b)   getMasterSink   (Master#(a, b) m) = m.sink;
-function Source#(b) getSlaveSource  (Slave#(a, b) s)  = s.source;
-function Sink#(a)   getSlaveSink    (Slave#(a, b) s)  = s.sink;
+
+function Source #(req_t) getMasterReqIfc (Master #(req_t, _a) m) = m.req;
+function Sink   #(rsp_t) getMasterRspIfc (Master #(_a, rsp_t) m) = m.rsp;
+function Sink   #(req_t) getSlaveReqIfc  (Slave #(req_t, _a) s)  = s.req;
+function Source #(rsp_t) getSlaveRspIfc  (Slave #(_a, rsp_t) s)  = s.rsp;
 
 endpackage

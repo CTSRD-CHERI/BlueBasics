@@ -26,34 +26,83 @@
  * @BERI_LICENSE_HEADER_END@
  */
 
+// This package provides a Virtualizable typeclass which provides a mean to turn
+// a virtualizable interface into an array of "n" virtualized interfaces to a
+// provided instance via a call to the 'virtualize' method.
+// It also provides Virtualizable instances for:
+// * Reg #(t)
+// * Server #(req_t, rsp_t)
+// * Slave #(req_t, rsp_t)
+//
+// A 'NeedRsp' typeclass is also defined to help implement instances of
+// Virtualizable for types which may pair requests and responses such as Server
+// and Slave. A call to the 'needRsp' method on a request will return whether
+// the virtualized interfaces are expected to produce a coresponding response or
+// not.
 
-//////////////////////////
-// Virtualize interface //
-//////////////////////////
+package Virtualizable;
 
-typeclass Virtualizable#(type a);
-  module virtualize#(a x, Integer n)(Array#(a));
+import FIFO         :: *;
+import FIFOF        :: *;
+import GetPut       :: *;
+import Printf       :: *;
+import SourceSink   :: *;
+import MasterSlave  :: *;
+import ClientServer :: *;
+import SpecialFIFOs :: *;
+
+// typeclass definitions
+////////////////////////////////////////////////////////////////////////////////
+
+// Virtualizable class
+//////////////////////
+typeclass Virtualizable #(type t);
+  // receive an instance of an interface and an integer 'n' and return an array
+  // of 'n' virtualized interfaces to the provided interface instance
+  module virtualize #(t x, Integer n)(Array #(t));
 endtypeclass
 
-// virtualizable instance for Reg, with static priority
-instance Virtualizable#(Reg#(a)) provisos (Bits#(a, a__));
-  module virtualize#(Reg#(a) r, Integer n)(Array#(Reg#(a)));
+// NeedRsp class
+////////////////
+typeclass NeedRsp #(type req_t);
+  // receive a request and returns "True" if it expects a corresponding response
+  function Bool needRsp (req_t req);
+endtypeclass
 
-    Reg#(a) ifc[n];
+// typeclass instances
+////////////////////////////////////////////////////////////////////////////////
+
+// NeedRsp instance for 'Either #(a, b)'
+// XXX Always expect a response...
+instance NeedRsp #(Either #(a, b));
+  function needRsp (_) = True;
+endinstance
+
+// Virtualizable instance for 'Reg #(t)'.
+// Reads all read the register's value.
+// Writes are statically prioritized, with lower interface indices having
+// priority over higher indices (this is _not_ a 'CReg').
+////////////////////////////////////////////////////////////////////////////////
+
+instance Virtualizable #(Reg #(t)) provisos (Bits #(t, _a));
+
+  module virtualize #(Reg #(t) r, Integer n) (Array #(Reg #(t)));
+
+    Reg #(t) ifc[n];
     Rules ifcRules = emptyRules;
 
     for (Integer i = 0; i < n; i = i + 1) begin
-      Wire#(a) w_write <- mkWire;
-      ifcRules = rJoinDescendingUrgency(ifcRules, rules
-        rule doWrite; r <= w_write; endrule
+      Wire #(t) wWrite <- mkWire;
+      ifcRules = rJoinDescendingUrgency (ifcRules, rules
+        rule doWrite; r <= wWrite; endrule
       endrules);
       ifc[i] = interface Reg;
         method _read = r._read;
-        method _write(x) = action w_write <= x; endaction;
+        method _write = wWrite._write;
       endinterface;
     end
 
-    addRules(ifcRules);
+    addRules (ifcRules);
 
     return ifc;
 
@@ -61,56 +110,49 @@ instance Virtualizable#(Reg#(a)) provisos (Bits#(a, a__));
 
 endinstance
 
-// virtualizable instance for Server/Slave, with static priority
-import MasterSlave :: *;
-import SourceSink :: *;
-import ClientServer :: *;
-import GetPut :: *;
-import FIFO :: *;
-import FIFOF :: *;
-import SpecialFIFOs :: *;
-import Printf :: *;
+// Virtualizable instance for Server
+// Per virtualized interface pairs of bypass FIFOs for requests and responses,
+// and a gloval "virtualized interface index" FIFO to route responses back from
+// the concrete interface to the appropriate virtualized interface (requests
+// which do not expect a response do not participate in this).
+// Requests are statically prioritized, with lower interface indices having
+// priority over higher indices.
+////////////////////////////////////////////////////////////////////////////////
 
-typeclass NeedRsp#(type req_t);
-  function Bool needRsp(req_t req);
-endtypeclass
+instance Virtualizable #(Server#(req_t, rsp_t))
+  provisos (NeedRsp #(req_t), Bits #(req_t, _a), Bits #(rsp_t, _b));
 
-instance NeedRsp#(Either#(a, b));
-  function needRsp(_) = True;
-endinstance
-
-instance Virtualizable#(Server#(req_t, rsp_t))
-provisos (NeedRsp#(req_t), Bits#(req_t, a__), Bits#(rsp_t, b__));
-
-  module virtualize#(Server#(req_t, rsp_t) server, Integer n)(Array#(Server#(req_t, rsp_t)));
+  module virtualize #(Server #(req_t, rsp_t) server, Integer n)
+                     (Array #(Server #(req_t, rsp_t)));
 
     `define MAX_IDX_SZ 4
-    if (log2(n) > `MAX_IDX_SZ)
-      error(sprintf("Asked for %0d interfaces, virtualize for Server can't support more than %0d", n, 2**`MAX_IDX_SZ));
+    if (log2 (n) > `MAX_IDX_SZ)
+      error (sprintf ( "Asked for %0d interfaces, virtualize for Server can't "
+                     + "support more than %0d", n, 2**`MAX_IDX_SZ));
 
-    Server#(req_t, rsp_t) ifc[n];
-    FIFO#(Bit#(`MAX_IDX_SZ)) ifcIdx <- mkFIFO;
+    Server #(req_t, rsp_t) ifc[n];
+    FIFO #(Bit #(`MAX_IDX_SZ)) ifcIdx <- mkFIFO;
     Rules ifcRules = emptyRules;
 
     for (Integer i = 0; i < n; i = i + 1) begin
       let reqFF <- mkBypassFIFO;
       let rspFF <- mkBypassFIFO;
-      ifcRules = rJoinDescendingUrgency(ifcRules, rules
+      ifcRules = rJoinDescendingUrgency (ifcRules, rules
         rule doSendReq;
           reqFF.deq;
           let req = reqFF.first;
-          server.request.put(req);
-          if (needRsp(req)) ifcIdx.enq(fromInteger(i));
+          server.request.put (req);
+          if (needRsp (req)) ifcIdx.enq (fromInteger (i));
         endrule
-        rule doGetRsp (ifcIdx.first == fromInteger(i));
+        rule doGetRsp (ifcIdx.first == fromInteger (i));
           ifcIdx.deq;
           let rsp <- server.response.get;
-          rspFF.enq(rsp);
+          rspFF.enq (rsp);
         endrule
       endrules);
       ifc[i] = interface Server;
-        interface  request = toPut(reqFF);
-        interface response = toGet(rspFF);
+        interface  request = toPut (reqFF);
+        interface response = toGet (rspFF);
       endinterface;
     end
 
@@ -121,44 +163,57 @@ provisos (NeedRsp#(req_t), Bits#(req_t, a__), Bits#(rsp_t, b__));
   endmodule
 endinstance
 
-instance Virtualizable#(Slave#(req_t, rsp_t))
-provisos (NeedRsp#(req_t), Bits#(req_t, a__), Bits#(rsp_t, b__));
+// Virtualizable instance for Slave
+// Per virtualized interface pairs of bypass FIFOs for requests and responses,
+// and a gloval "virtualized interface index" FIFO to route responses back from
+// the concrete interface to the appropriate virtualized interface (requests
+// which do not expect a response do not participate in this).
+// Requests are statically prioritized, with lower interface indices having
+// priority over higher indices.
+////////////////////////////////////////////////////////////////////////////////
 
-  module virtualize#(Slave#(req_t, rsp_t) slave, Integer n)(Array#(Slave#(req_t, rsp_t)));
+instance Virtualizable #(Slave #(req_t, rsp_t))
+  provisos (NeedRsp #(req_t), Bits #(req_t, a__), Bits #(rsp_t, b__));
+
+  module virtualize #(Slave #(req_t, rsp_t) slave, Integer n)
+                     (Array #(Slave #(req_t, rsp_t)));
 
     `define MAX_IDX_SZ 4
-    if (log2(n) > `MAX_IDX_SZ)
-      error(sprintf("Asked for %0d interfaces, virtualize for Slave can't support more than %0d", n, 2**`MAX_IDX_SZ));
+    if (log2 (n) > `MAX_IDX_SZ)
+      error (sprintf ( "Asked for %0d interfaces, virtualize for Slave can't "
+                     + "support more than %0d", n, 2**`MAX_IDX_SZ));
 
-    Slave#(req_t, rsp_t) ifc[n];
-    FIFO#(Bit#(`MAX_IDX_SZ)) ifcIdx <- mkFIFO;
+    Slave #(req_t, rsp_t) ifc[n];
+    FIFO #(Bit #(`MAX_IDX_SZ)) ifcIdx <- mkFIFO;
     Rules ifcRules = emptyRules;
 
     for (Integer i = 0; i < n; i = i + 1) begin
       let reqFF <- mkBypassFIFOF;
       let rspFF <- mkBypassFIFOF;
-      ifcRules = rJoinDescendingUrgency(ifcRules, rules
+      ifcRules = rJoinDescendingUrgency (ifcRules, rules
         rule doSendReq;
           reqFF.deq;
-          let req = reqFF.first;
-          slave.sink.put(req);
-          if (needRsp(req)) ifcIdx.enq(fromInteger(i));
+          let x = reqFF.first;
+          slave.req.put (x);
+          if (needRsp (x)) ifcIdx.enq (fromInteger (i));
         endrule
-        rule doGetRsp (ifcIdx.first == fromInteger(i));
+        rule doGetRsp (ifcIdx.first == fromInteger (i));
           ifcIdx.deq;
-          let rsp <- get(slave.source);
-          rspFF.enq(rsp);
+          let x <- get (slave.rsp);
+          rspFF.enq (x);
         endrule
       endrules);
       ifc[i] = interface Slave;
-        interface   sink = toSink(reqFF);
-        interface source = toSource(rspFF);
+        interface req = toSink (reqFF);
+        interface rsp = toSource (rspFF);
       endinterface;
     end
 
-    addRules(ifcRules);
+    addRules (ifcRules);
 
     return ifc;
 
   endmodule
 endinstance
+
+endpackage
