@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2018 Alexandre Joannou
+ * Copyright (c) 2018-2022 Alexandre Joannou
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -34,6 +34,7 @@ import Dict :: *;
 import Virtualizable :: *;
 import SourceSink :: *;
 import MasterSlave :: *;
+import Primitives :: *;
 
 export Monoid :: *;
 export ListExtra :: *;
@@ -41,5 +42,6 @@ export Dict :: *;
 export Virtualizable :: *;
 export SourceSink :: *;
 export MasterSlave :: *;
+export Primitives :: *;
 
 endpackage
