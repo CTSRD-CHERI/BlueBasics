@@ -33,6 +33,7 @@ import ListExtra :: *;
 import Dict :: *;
 import Virtualizable :: *;
 import SourceSink :: *;
+import CreditBasedFlowControl :: *;
 import MasterSlave :: *;
 import Primitives :: *;
 
@@ -41,6 +42,7 @@ export ListExtra :: *;
 export Dict :: *;
 export Virtualizable :: *;
 export SourceSink :: *;
+export CreditBasedFlowControl :: *;
 export MasterSlave :: *;
 export Primitives :: *;
 
