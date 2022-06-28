@@ -68,7 +68,7 @@ endinstance
 module toSourceWithCredit #(parameter NumProxy #(t_max_credits) _proxy, t_src s)
                            (SourceWithCredit #(t))
   provisos ( ToSource #(t_src, t)
-           , NumAlias #(t_credits_w, TLog #(t_max_credits))
+           , NumAlias #(t_credits_w, TLog #(TAdd #(t_max_credits, 1)))
            );
 
   Reg #(Bit #(t_credits_w)) r_credits <- mkReg (0);

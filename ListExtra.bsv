@@ -31,7 +31,7 @@ package ListExtra;
 import Printf :: *;
 
 import List :: *;
-export List :: *;
+//export List :: *;
 
 export list;
 export MkList;

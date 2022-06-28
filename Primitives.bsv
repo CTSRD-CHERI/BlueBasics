@@ -114,9 +114,9 @@ module mkRegistrationTable
   IntSet #(key_sz) keySet <- mkIntSet;
 
   // entry querry functions
-  function Bool matchKey  (key_t k, entry_t e)   = tpl_1 (e) == k;
+  function Bool matchKey   (key_t k, entry_t e) = tpl_1 (e) == k;
   function Bool matchData (data_t d, entry_t e) = tpl_2 (e) == d;
-  function Bool matchCnt  (cnt_t c, entry_t e)   = tpl_3 (e) == c;
+  function Bool matchCnt   (cnt_t c, entry_t e) = tpl_3 (e) == c;
 
   // Interface
   ////////////
