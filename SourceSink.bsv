@@ -453,7 +453,7 @@ module splitAnyHomogeneousSource #( // split transformation
   // returned vector of sources
   (Vector #(n, Source #(b)))
   // constraints
-  provisos (Bits #(b, b_sz));
+  provisos (Bits #(a, a_sz), Bits #(b, b_sz));
   // ressources declaration
   Vector #(n, FIFOF #(b)) ffs <- replicateM (mkBypassFIFOF);
   Vector #(n, Array #(Reg #(Bool))) produced <- replicateM (mkCReg (2, False));
@@ -510,8 +510,8 @@ module splitAnyHeterogeneousSource #( // splitting transformation for 1st type
   // constraints
   provisos (Bits #(a, a_sz), Bits #(b, b_sz));
 
-  module prepFromSrc #(function Maybe #(t1) f (t0 x))
-    (Tuple3 #(Bool, Action, Source #(t1)));
+  module prepFromSrc #(function Maybe #(t) f (c x))
+    (Tuple3 #(Bool, Action, Source #(t))) provisos (Bits #(t, t_sz));
     let ff <- mkBypassFIFOF;
     Reg #(Bool) hasProduced [2] <- mkCReg (2, False);
     let needProcude = src.canPeek && isValid (f (src.peek));
@@ -532,7 +532,7 @@ module splitAnyHeterogeneousSource #( // splitting transformation for 1st type
   rule dropInput (aDropGuard && bDropGuard);
     src.drop; aProdAck; bProdAck;
   endrule
-  return tuple2 (toSource (ffa), toSource (ffb));
+  return tuple2 (aSrc, bSrc);
 endmodule
 
 // splitAnyHeterogeneousSink
