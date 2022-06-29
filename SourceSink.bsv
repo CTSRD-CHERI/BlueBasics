@@ -477,9 +477,9 @@ module splitAnyHomogeneousSource #( // split transformation
   // overall input consumption rule
   function fDropOk (needProd, hasProd) = !needProd || hasProd;
   (* fire_when_enabled *)
-  rule dropInput (\and (zipWith ( fDropOk
-                                , needProcude
-                                , map (rIfc1, produced ))));
+  rule dropInput (ugSrc.canPeek && \and (zipWith ( fDropOk
+                                                 , needProcude
+                                                 , map (rIfc1, produced ))));
     ugSrc.drop;
     mapM_ (wIfc1 (False), produced);
   endrule
