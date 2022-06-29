@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2018-2021 Alexandre Joannou
+ * Copyright (c) 2018-2022 Alexandre Joannou
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -41,15 +41,15 @@ import Connectable :: *;
 ////////////////////////////////////////////////////////////////////////////////
 
 // A 'Master' is a source of requests and a sink for responses
-interface Master #(type req_t, type rsp_t);
-  interface Source #(req_t) req;
-  interface Sink   #(rsp_t) rsp;
+interface Master #(type t_req, type t_rsp);
+  interface Source #(t_req) req;
+  interface Sink   #(t_rsp) rsp;
 endinterface
 
 // A 'Slave' is a sink for requests and a source of responses
-interface Slave #(type req_t, type rsp_t);
-  interface Sink   #(req_t) req;
-  interface Source #(rsp_t) rsp;
+interface Slave #(type t_req, type t_rsp);
+  interface Sink   #(t_req) req;
+  interface Source #(t_rsp) rsp;
 endinterface
 
 ///////////////////////////
@@ -58,18 +58,18 @@ endinterface
 // Simply connect a 'Master' 's request source to a 'Slave' 's request sink,
 // and a 'Slave' 's response source to a 'Master' 's response sink
 
-instance Connectable #(Master #(req_t, rsp_t), Slave #(req_t, rsp_t))
-  provisos (Bits #(req_t, _a), Bits #(rsp_t, _b));
-  module mkConnection #(Master #(req_t, rsp_t) m, Slave #(req_t, rsp_t) s)
+instance Connectable #(Master #(t_req, t_rsp), Slave #(t_req, t_rsp))
+  provisos (Bits #(t_req, _a), Bits #(t_rsp, _b));
+  module mkConnection #(Master #(t_req, t_rsp) m, Slave #(t_req, t_rsp) s)
                        (Empty);
     mkConnection (m.req, s.req);
     mkConnection (m.rsp, s.rsp);
   endmodule
 endinstance
 
-instance Connectable #(Slave #(req_t, rsp_t), Master #(req_t, rsp_t))
-  provisos (Bits #(req_t, _a), Bits #(rsp_t, _b));
-  module mkConnection #(Slave #(req_t, rsp_t) s, Master #(req_t, rsp_t) m)
+instance Connectable #(Slave #(t_req, t_rsp), Master #(t_req, t_rsp))
+  provisos (Bits #(t_req, _a), Bits #(t_rsp, _b));
+  module mkConnection #(Slave #(t_req, t_rsp) s, Master #(t_req, t_rsp) m)
                        (Empty);
     mkConnection (s.req, m.req);
     mkConnection (s.rsp, m.rsp);
@@ -82,14 +82,14 @@ endinstance
 // simple debug utilities using the underlying 'debugSource' and 'debugSink'
 // functions which print provided messages on source drop / sink put
 
-function Master #(req_t, rsp_t) debugMaster (Master #(req_t, rsp_t) m, Fmt msg)
-  provisos (FShow #(req_t), FShow #(rsp_t)) = interface Master;
+function Master #(t_req, t_rsp) debugMaster (Master #(t_req, t_rsp) m, Fmt msg)
+  provisos (FShow #(t_req), FShow #(t_rsp)) = interface Master;
     interface req = debugSource (m.req, msg);
     interface rsp = debugSink   (m.rsp, msg);
   endinterface;
 
-function Slave #(req_t, rsp_t) debugSlave (Slave #(req_t, rsp_t) s, Fmt msg)
-  provisos (FShow #(req_t), FShow #(rsp_t)) = interface Slave;
+function Slave #(t_req, t_rsp) debugSlave (Slave #(t_req, t_rsp) s, Fmt msg)
+  provisos (FShow #(t_req), FShow #(t_rsp)) = interface Slave;
     interface req = debugSink   (s.req, msg);
     interface rsp = debugSource (s.rsp, msg);
   endinterface;
@@ -99,9 +99,9 @@ function Slave #(req_t, rsp_t) debugSlave (Slave #(req_t, rsp_t) s, Fmt msg)
 ////////////////////////////////////////////////////////////////////////////////
 // Get desired Master / Slave sub-interface
 
-function Source #(req_t) getMasterReqIfc (Master #(req_t, _a) m) = m.req;
-function Sink   #(rsp_t) getMasterRspIfc (Master #(_a, rsp_t) m) = m.rsp;
-function Sink   #(req_t) getSlaveReqIfc  (Slave #(req_t, _a) s)  = s.req;
-function Source #(rsp_t) getSlaveRspIfc  (Slave #(_a, rsp_t) s)  = s.rsp;
+function Source #(t_req) getMasterReqIfc (Master #(t_req, t) m) = m.req;
+function Sink   #(t_rsp) getMasterRspIfc (Master #(t, t_rsp) m) = m.rsp;
+function Sink   #(t_req) getSlaveReqIfc  (Slave #(t_req, t) s)  = s.req;
+function Source #(t_rsp) getSlaveRspIfc  (Slave #(t, t_rsp) s)  = s.rsp;
 
 endpackage

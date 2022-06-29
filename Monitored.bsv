@@ -1,6 +1,6 @@
 /*-
  * Copyright (c) 2020 Jonas Fiala
- * Copyright (c) 2021 Alexandre Joannou
+ * Copyright (c) 2021-2022 Alexandre Joannou
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -31,58 +31,45 @@ package Monitored;
 
 import SourceSink :: *;
 import DefaultValue :: *;
-//import MasterSlave :: *;
 
 // Wrapper interface for reporting events of a given interface
-interface Monitored#(type originalIfc, type events_t);
-  interface originalIfc ifc;
-  interface ReadOnly#(events_t) events;
+interface Monitored #(type t_ifc, type t_evts);
+  interface t_ifc ifc;
+  interface ReadOnly #(t_evts) events;
 endinterface
 
-// Report drop events on a Source
-module monitorSource #(Source#(t) s) (Monitored#(Source#(t), Bool));
-  PulseWire evt <- mkPulseWire;
-  interface ifc = onDrop (constFn (evt.send), s);
-  interface events = pulseWireToReadOnly(evt);
-endmodule
-
 // Report arbitrary events upon Source drop
-module monitorSourceWith #(Source#(t) s, function evt_t f(t x))
-                          (Monitored#(Source#(t), evt_t))
-  provisos (DefaultValue#(evt_t), Bits#(evt_t, evt_sz));
-  Wire#(evt_t) evt <- mkDWire(defaultValue);
-  function fAct (x) = evt._write(f(x));
-  interface ifc = onDrop (fAct, s);
-  interface events = regToReadOnly(evt); // NOTE: Wire ifc == Reg ifc
+module monitorSourceWith #(Source #(t) src, function t_evts f (t x))
+                          (Monitored #(Source #(t), t_evts))
+  provisos (DefaultValue #(t_evts), Bits #(t_evts, t_evts_sz));
+  Wire #(t_evts) evt <- mkDWire (defaultValue);
+  function fAct (x) = evt._write (f (x));
+  interface ifc = onDrop (fAct, src);
+  interface events = regToReadOnly (evt); // NOTE: Wire ifc == Reg ifc
 endmodule
 
-// Report put events on a Sink
-module monitorSink #(Sink#(t) s) (Monitored#(Sink#(t), Bool));
-  PulseWire evt <- mkPulseWire;
-  interface ifc = onPut (constFn (evt.send), s);
-  interface events = pulseWireToReadOnly(evt);
+// Report drop events on a Source
+module monitorSource #(Source #(t) src) (Monitored #(Source #(t), Bool));
+  // NOTE: defaultValue for Bool in defined to be False
+  let m <- monitorSourceWith (src, constFn (True));
+  return m;
 endmodule
 
 // Report arbitrary events upon Sink put
-module monitorSinkWith #(Sink#(t) s, function evt_t f(t x))
-                        (Monitored#(Sink#(t), evt_t))
-  provisos (DefaultValue#(evt_t), Bits#(evt_t, evt_sz));
-  Wire#(evt_t) evt <- mkDWire(defaultValue);
-  function fAct (x) = evt._write(f(x));
-  interface ifc = onPut (fAct, s);
-  interface events = regToReadOnly(evt); // NOTE: Wire ifc == Reg ifc
+module monitorSinkWith #(Sink #(t) snk, function t_evts f (t x))
+                        (Monitored #(Sink #(t), t_evts))
+  provisos (DefaultValue #(t_evts), Bits #(t_evts, t_evts_sz));
+  Wire #(t_evts) evt <- mkDWire (defaultValue);
+  function fAct (x) = evt._write (f (x));
+  interface ifc = onPut (fAct, snk);
+  interface events = regToReadOnly (evt); // NOTE: Wire ifc == Reg ifc
 endmodule
 
-/* TODO
-// Report drop and put events on a Master
-module monitorMaster #(Master#(req, resp) m)
-                      (Monitored#(Master#(req, resp), MasterEvents));
+// Report put events on a Sink
+module monitorSink #(Sink #(t) snk) (Monitored #(Sink #(t), Bool));
+  // NOTE: defaultValue for Bool in defined to be False
+  let m <- monitorSinkWith (snk, constFn (True));
+  return m;
 endmodule
-
-// Report drop and put events on a Master
-module monitorSlave #(Slave#(req, resp) s)
-                     (Monitored#(Slave#(req, resp), SlaveEvents));
-endmodule
-*/
 
 endpackage

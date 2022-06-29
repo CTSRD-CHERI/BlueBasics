@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2018 Alexandre Joannou
+ * Copyright (c) 2018-2022 Alexandre Joannou
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -31,20 +31,20 @@ package Monoid;
 import List :: *;
 
 // typeclass definition
-typeclass Monoid#(type a);
+typeclass Monoid #(type a);
   function a mempty;
-  function a mappend(a x, a y);
-  function a mconcat(List#(a) x) = foldr(mappend, mempty, x);
+  function a mappend (a x, a y);
+  function a mconcat (List #(a) x) = foldr (mappend, mempty, x);
 endtypeclass
 
 // Rules instance
-instance Monoid#(Rules);
+instance Monoid #(Rules);
   function mempty  = emptyRules;
   function mappend = rJoin;
 endinstance
 
 // List instance
-instance Monoid#(List#(a));
+instance Monoid #(List #(a));
   function mempty  = tagged Nil;
   function mappend = append;
 endinstance
