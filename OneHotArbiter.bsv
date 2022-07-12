@@ -78,11 +78,11 @@ module mkFairOneHotArbiter#(List#(t) xs) (OneHotArbiter) provisos (Arbitrable#(t
     // get lastSel as a List#(Bool)
     List#(Bool) lastSel = map(readReg, lastSelect);
     // rotate the list of participants to put last elected to the end
-    List#(Bool) searchList = oneHotRotateBy(lastSel, pending);
+    List#(Bool) searchList = oneHotRotateRBy(lastSel, pending);
     // elect the next participant
     List#(Bool) newSel = lastSel;
     Maybe#(List#(Bool)) elected = firstHotToOneHot(searchList);
-    if (isValid(elected)) newSel = oneHotRotateRBy(lastSel, elected.Valid);
+    if (isValid(elected)) newSel = oneHotRotateLBy(lastSel, elected.Valid);
     else begin // This should never happen
       $display("mkFairOneHotArbiter: next method should not be run with no pending request");
       $finish(0);
