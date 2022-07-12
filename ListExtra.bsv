@@ -140,8 +140,8 @@ function List#(a) oneHotRotateLBy(List#(Bool) xs, List#(a) ys)
   return rotateLBy(r, ys);
 endfunction
 
-function List#(a) oneHotRotateLBy(List#(Bool) xs, List#(a) ys) =
-  oneHotRotateBy (xs, ys);
+function List#(a) oneHotRotateBy(List#(Bool) xs, List#(a) ys)
+  provisos (Bits#(a, a_sz)) = oneHotRotateLBy (xs, ys);
 
 // The inverse of oneHotRotateLBy
 // There are two interpretations for this function, as with oneHotRotateLBy:
