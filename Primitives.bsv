@@ -35,6 +35,30 @@ import Vector :: *;
 typedef struct {} Proxy #(type t);
 typedef struct {} NumProxy #(numeric type n);
 
+// cycle counter
+////////////////////////////////////////////////////////////////////////////////
+
+module mkCycleCount (ReadOnly #(UInt #(n)));
+  // keep track of time
+  Reg #(UInt #(n)) cycle <- mkReg (0);
+  (* no_implicit_conditions, fire_when_enabled *)
+  rule tick; cycle <= cycle + 1; endrule
+  return regToReadOnly (cycle);
+endmodule
+
+// merge two data chunks with byte enable
+////////////////////////////////////////////////////////////////////////////////
+
+function t mergeWithBE (t_be be, t oldData, t newData)
+  provisos ( Bits #(t, t_sz), Bits #(t_be, t_be_sz)
+           , Bits #(Vector #(t_be_sz, Bit #(8)), t_sz) );
+  Vector #(t_be_sz, Bit #(8)) oldVec = unpack (pack (oldData));
+  Vector #(t_be_sz, Bit #(8)) newVec = unpack (pack (newData));
+  Vector #(t_be_sz, Bit #(1))  beVec = unpack (pack (be));
+  function mux2 (sel, a, b) = (sel == 0) ? a : b;
+  return unpack (pack (zipWith3 (mux2, beVec, oldVec, newVec)));
+endfunction
+
 // set of integers
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -58,7 +58,7 @@ interface Sink #(type t);
   method Action put (t val);
 endinterface
 
-interface SourceSink #(type t);
+interface SourceSinkShim #(type t);
   interface Source #(t) source;
   interface Sink   #(t) sink;
 endinterface
@@ -89,6 +89,10 @@ instance ToSource #(Source #(t), t);
   function toSource = id;
 endinstance
 
+instance ToSource #(SourceSinkShim #(t), t);
+  function toSource (shim) = shim.source;
+endinstance
+
 instance ToSource #(FIFOF #(t), t);
   function toSource (ff) = interface Source #(t);
     method canPeek = ff.notEmpty;
@@ -96,6 +100,32 @@ instance ToSource #(FIFOF #(t), t);
     method drop    = ff.deq;
   endinterface;
 endinstance
+
+/*
+instance ToSource #(RWire #(t), t);
+  function toSource (w) = interface Source #(t);
+    method canPeek = isValid (w.wget);
+    method peek    = fromMaybe (?, w.wget);
+    method drop    = noAction;
+  endinterface;
+endinstance
+
+instance ToSource #(Wire #(Maybe #(t)), t);
+  function toSource (w) = interface Source #(t);
+    method canPeek = isValid (w);
+    method peek    = fromMaybe (?, w);
+    method drop    = noAction;
+  endinterface;
+endinstance
+
+instance ToSource #(PulseWire, Bit #(0));
+  function toSource (w) = interface Source #(Bit #(0));
+    method canPeek = w;
+    method peek    = ?;
+    method drop    = noAction;
+  endinterface;
+endinstance
+*/
 
 // ToSink
 
@@ -107,12 +137,79 @@ instance ToSink #(Sink #(t), t);
   function toSink = id;
 endinstance
 
+instance ToSink #(SourceSinkShim #(t), t);
+  function toSink (shim) = shim.sink;
+endinstance
+
 instance ToSink #(FIFOF #(t), t);
   function toSink (ff) = interface Sink;
     method canPut = ff.notFull;
     method put    = ff.enq;
   endinterface;
 endinstance
+
+/*
+instance ToSink #(RWire #(t), t);
+  function toSink (w) = interface Sink #(t);
+    method canPut = True;
+    method put    = w.wset;
+  endinterface;
+endinstance
+
+instance ToSink #(Wire #(Maybe #(t)), t);
+  function toSink (w) = interface Sink #(t);
+    method canPut  = True;
+    method put (x) = w._write (Valid (x));
+  endinterface;
+endinstance
+
+instance ToSink #(PulseWire, Bool);
+  function toSink (w) = interface Sink #(t);
+    method canPut   = True;
+    method put (_x) = w.send;
+  endinterface;
+endinstance
+*/
+
+// ToSourceSinkShim
+
+typeclass ToSourceSinkShim #(type a, type b) dependencies (a determines b);
+  function SourceSinkShim #(b) toSourceSinkShim (a x);
+endtypeclass
+
+instance ToSourceSinkShim #(a, b) provisos ( ToSource #(a, b), ToSink #(a, b));
+  function toSourceSinkShim (x) = interface SourceSinkShim;
+    interface source = toSource (x);
+    interface   sink =   toSink (x);
+  endinterface;
+endinstance
+
+// Common Source / Sink constructors
+////////////////////////////////////////////////////////////////////////////////
+
+// constant source
+function Source #(t) constSource (t x) = interface Source;
+  method canPeek = True;
+  method peek if (True) = x;
+  method drop if (True) = noAction;
+endinterface;
+
+// null sources / sinks
+function Source #(t) nullSource = interface Source;
+  method canPeek = False;
+  method peek if (False) = ?;
+  method drop if (False) = noAction;
+endinterface;
+
+function Sink #(t) blockedSink = interface Sink;
+  method canPut = False;
+  method put (x) if (False) = noAction;
+endinterface;
+
+function Sink #(t) nullSink = interface Sink;
+  method canPut = True;
+  method put (x) if (True) = noAction;
+endinterface;
 
 /////////////////////////
 // mapSource / mapSink //
@@ -131,6 +228,31 @@ function Sink #(b) mapSink ( function a f (b x)
   method put (x) = snk.put (f (x));
 endinterface;
 
+////////////////////////////////////////
+// augment source/sink with an action //
+////////////////////////////////////////////////////////////////////////////////
+
+function Source #(t) onDrop (function Action f (t x), src_t s)
+  provisos (ToSource #(src_t, t));
+  let src = toSource (s);
+  return interface Source;
+    method canPeek = src.canPeek;
+    method peek = src.peek;
+    method drop = action src.drop; f (src.peek); endaction;
+  endinterface;
+endfunction
+
+// Note: if a simple action with no argument is desired, consider using a
+//       partially applied call to constFn as the first argument to onPut
+function Sink #(t) onPut (function Action f (t x), snk_t s)
+  provisos (ToSink #(snk_t, t));
+  let snk = toSink (s);
+  return interface Sink;
+    method canPut = snk.canPut;
+    method put (x) = action snk.put (x); f (x); endaction;
+  endinterface;
+endfunction
+
 /////////////////////////////
 // ToGet / ToPut instances //
 ////////////////////////////////////////////////////////////////////////////////
@@ -143,6 +265,10 @@ instance ToGet #(Source #(t), t);
       return s.peek;
     endactionvalue;
   endinterface;
+endinstance
+
+instance ToGet #(SourceSinkShim #(t), t);
+  function toGet (s) = toGet (s.source);
 endinstance
 
 /* XXX this can't be defined...
@@ -158,11 +284,31 @@ instance ToPut #(Sink #(t), t);
   endinterface;
 endinstance
 
+instance ToPut #(SourceSinkShim #(t), t);
+  function toPut (s) = toPut (s.sink);
+endinstance
+
 /* XXX this yields a warning...
 instance ToPut #(snk_t, t) provisos (ToSink #(snk_t, t));
   function toPut (s) = toPut (toSink (s));
 endinstance
 */
+
+module mkPutToSinkWith #( function module #(FIFOF #(t)) mkFF ()
+                        , Put #(t) put )
+  (Sink #(t)) provisos (Bits #(t, t_sz));
+  FIFOF #(t) ff <- mkFF;
+  mkConnection (toGet (ff), put);
+  return toSink (ff);
+endmodule
+
+module mkGetToSourceWith #( function module #(FIFOF #(t)) mkFF ()
+                          , Get #(t) get )
+  (Source #(t)) provisos (Bits #(t, t_sz));
+  FIFOF #(t) ff <- mkFF;
+  mkConnection (get, toPut (ff));
+  return toSource (ff);
+endmodule
 
 ///////////////////////////
 // Connectable instances //
@@ -264,6 +410,18 @@ endmodule
 // toGuardedSource/Sink functions //
 ////////////////////////////////////////////////////////////////////////////////
 
+function Source #(t) guardSource (Source #(t) raw, Bool block) =
+  interface Source;
+    method canPeek = raw.canPeek && !block;
+    method peek if (!block) = raw.peek;
+    method drop if (!block) = raw.drop;
+  endinterface;
+
+function Sink #(t) guardSink (Sink #(t) raw, Bool block) = interface Sink;
+  method canPut = raw.canPut && !block;
+  method put if (!block) = raw.put;
+endinterface;
+
 function Source #(t) toGuardedSource (src_t s) provisos (ToSource #(src_t, t));
   let src = toSource (s);
   return guardSource (src, !src.canPeek);
@@ -278,67 +436,62 @@ endfunction
 // Shims //
 ////////////////////////////////////////////////////////////////////////////////
 
-module mkPutToSink #(Put #(t) put) (Sink #(t)) provisos (Bits #(t, t_sz));
-  FIFOF #(t) ff <- mkBypassFIFOF;
-  mkConnection (toGet(ff), put);
-  return toSink (ff);
+module mkSourceSinkShimWith #(function module #(FIFOF #(t)) mkFF ())
+  (SourceSinkShim #(t));
+  let shim <- fmap (toSourceSinkShim, mkFF);
+  return shim;
 endmodule
 
-module mkGetToSource #(Get #(t) get) (Source #(t)) provisos (Bits #(t, t_sz));
-  FIFOF #(t) ff <- mkBypassFIFOF;
-  mkConnection (get, toPut (ff));
-  return toSource (ff);
+`define defSourceShimFF (name, mkFF)\
+module mkSourceSinkShim``name (SourceSinkShim #(t)) provisos (Bits #(t, tsz));\
+  let shim <- mkSourceSinkShimWith (mkFF);\
+  return shim;\
 endmodule
 
-////////////////////////////////////////
-// augment source/sink with an action //
+`defSourceShimFF(FF, mkFIFOF)
+`defSourceShimFF(FF1, mkFIFOF1)
+`defSourceShimFF(FF4, mkSizedFIFOF (4))
+`defSourceShimFF(FF32, mkSizedFIFOF (32))
+`defSourceShimFF(UGFF, mkUGFIFOF)
+`defSourceShimFF(UGFF4, mkUGSizedFIFOF (4))
+`defSourceShimFF(UGFF32, mkUGSizedFIFOF (32))
+`defSourceShimFF(BypassFF, mkBypassFIFOF)
+`defSourceShimFF(BypassFF1, mkSizedBypassFIFOF (1))
+
+`undef defSourceShimFF
+
+// Req / Rsp utilities
 ////////////////////////////////////////////////////////////////////////////////
 
-function Source #(t) onDrop (function Action f (t x), src_t s)
-  provisos (ToSource #(src_t, t));
-  let src = toSource (s);
-  return interface Source;
-    method canPeek = src.canPeek;
-    method peek = src.peek;
-    method drop = action src.drop; f (src.peek); endaction;
-  endinterface;
+module mkReqRspPre #( function module #(FIFOF #(rspT)) mkFF
+                    , function rspT f (reqT req) )
+                    (Tuple2 #(Sink #(reqT), Source #(rspT)));
+  let ff <- mkFF;
+  return tuple2 (mapSink (f, toSink (ff)), toSource (ff));
+endmodule
+
+module mkReqRspPost #( function module #(FIFOF #(reqT)) mkFF
+                     , function rspT f (reqT req) )
+                     (Tuple2 #(Sink #(reqT), Source #(rspT)));
+  let ff <- mkFF;
+  return tuple2 (toSink (ff), mapSource (f, toSource (ff)));
+endmodule
+
+// debug wrapping
+////////////////////////////////////////////////////////////////////////////////
+function Source #(t) debugSource (Source #(t) src, Fmt msg)
+  provisos (FShow #(t)) =
+  onDrop( constFn ($display ( msg
+                            , " - Source drop method called - "
+                            , fshow (src.peek)))
+        , src );
+
+function Sink #(t) debugSink (Sink #(t) snk, Fmt msg) provisos (FShow #(t));
+  function f (x) = action
+    $display( msg, " - Sink put method called - ", fshow (x));
+  endaction;
+  return onPut (f, snk);
 endfunction
-
-// Note: if a simple action with no argument is desired, consider using a
-//       partially applied call to constFn as the first argument to onPut
-function Sink #(t) onPut (function Action f (t x), snk_t s)
-  provisos (ToSink #(snk_t, t));
-  let snk = toSink (s);
-  return interface Sink;
-    method canPut = snk.canPut;
-    method put (x) = action snk.put (x); f (x); endaction;
-  endinterface;
-endfunction
-
-/////////////////////////////
-// helpers and other utils //
-////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////
-
-// constant source
-function Source #(t) constSource (t x) = interface Source;
-  method canPeek = True;
-  method peek if (True) = x;
-  method drop if (True) = noAction;
-endinterface;
-
-// null sources / sinks
-function Source #(t) nullSource = interface Source;
-  method canPeek = False;
-  method peek if (False) = ?;
-  method drop if (False) = noAction;
-endinterface;
-
-function Sink #(t) nullSink = interface Sink;
-  method canPut = True;
-  method put (x) = noAction;
-endinterface;
 
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
@@ -800,52 +953,5 @@ module splitSink #(Sink #(Tuple2 #(a, b)) s)
   let res <- splitSinkWith (tuple2, s);
   return res;
 endmodule
-
-// Req / Rsp utilities
-////////////////////////////////////////////////////////////////////////////////
-
-module mkReqRspPre #( function module #(FIFOF #(rspT)) mkFF
-                    , function rspT f (reqT req) )
-                    (Tuple2 #(Sink #(reqT), Source #(rspT)));
-  let ff <- mkFF;
-  return tuple2 (mapSink (f, toSink (ff)), toSource (ff));
-endmodule
-
-module mkReqRspPost #( function module #(FIFOF #(reqT)) mkFF
-                     , function rspT f (reqT req) )
-                     (Tuple2 #(Sink #(reqT), Source #(rspT)));
-  let ff <- mkFF;
-  return tuple2 (toSink (ff), mapSource (f, toSource (ff)));
-endmodule
-
-// debug wrapping
-////////////////////////////////////////////////////////////////////////////////
-function Source #(t) debugSource (Source #(t) src, Fmt msg)
-  provisos (FShow #(t)) =
-  onDrop( constFn ($display ( msg
-                            , " - Source drop method called - "
-                            , fshow (src.peek)))
-        , src );
-
-function Sink #(t) debugSink (Sink #(t) snk, Fmt msg) provisos (FShow #(t));
-  function f (x) = action
-    $display( msg, " - Sink put method called - ", fshow (x));
-  endaction;
-  return onPut (f, snk);
-endfunction
-
-// add a Boolean guard to a Source
-////////////////////////////////////////////////////////////////////////////////
-function Source #(t) guardSource (Source #(t) raw, Bool block) =
-  interface Source;
-    method canPeek = raw.canPeek && !block;
-    method peek if (!block) = raw.peek;
-    method drop if (!block) = raw.drop;
-  endinterface;
-
-function Sink #(t) guardSink (Sink #(t) raw, Bool block) = interface Sink;
-  method canPut = raw.canPut && !block;
-  method put if (!block) = raw.put;
-endinterface;
 
 endpackage
