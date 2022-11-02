@@ -481,14 +481,14 @@ endmodule
 ////////////////////////////////////////////////////////////////////////////////
 function Source #(t) debugSource (Source #(t) src, Fmt msg)
   provisos (FShow #(t)) =
-  onDrop( constFn ($display ( msg
+  onDrop( constFn ($display ( "<%0t> ", $time, msg
                             , " - Source drop method called - "
                             , fshow (src.peek)))
         , src );
 
 function Sink #(t) debugSink (Sink #(t) snk, Fmt msg) provisos (FShow #(t));
   function f (x) = action
-    $display( msg, " - Sink put method called - ", fshow (x));
+    $display("<%0t> ", $time, msg, " - Sink put method called - ", fshow (x));
   endaction;
   return onPut (f, snk);
 endfunction
