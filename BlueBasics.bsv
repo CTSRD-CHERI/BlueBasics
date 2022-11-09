@@ -36,6 +36,8 @@ import SourceSink :: *;
 import CreditBasedFlowControl :: *;
 import MasterSlave :: *;
 import Primitives :: *;
+import Monitored :: *;
+import Routable :: *;
 
 export Monoid :: *;
 export ListExtra :: *;
@@ -45,5 +47,7 @@ export SourceSink :: *;
 export CreditBasedFlowControl :: *;
 export MasterSlave :: *;
 export Primitives :: *;
+export Monitored :: *;
+export Routable :: *;
 
 endpackage
