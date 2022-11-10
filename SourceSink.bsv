@@ -39,6 +39,7 @@ package SourceSink;
 
 import Vector :: *;
 import FIFOF :: *;
+import Probe :: *;
 import SpecialFIFOs :: *;
 import GetPut :: *;
 import Connectable :: *;
@@ -431,6 +432,66 @@ function Sink #(t) toGuardedSink (snk_t s) provisos (ToSink #(snk_t, t));
   let snk = toSink (s);
   return guardSink (snk, !snk.canPut);
 endfunction
+
+/////////////////////////
+// probe source / sink //
+////////////////////////////////////////////////////////////////////////////////o
+
+module probeSource #(src_t s) (Source #(t))
+  provisos (ToSource #(src_t, t), Bits #(t, _));
+
+  let src = toSource (s);
+
+  Probe #(Bool) probe_canPeek <- mkProbe;
+  (* fire_when_enabled, no_implicit_conditions *)
+  rule do_probe_canPeek; probe_canPeek <= src.canPeek; endrule
+
+  Probe #(t) probe_peek <- mkProbe;
+  (* fire_when_enabled *)
+  rule do_probe_peek; probe_peek <= src.peek; endrule
+
+  PulseWire dropWire <- mkPulseWire;
+  Probe #(Bool) probe_drop <- mkProbe;
+  (* fire_when_enabled *)
+  rule do_probe_drop; probe_drop <= dropWire; endrule
+
+  return onDrop (constFn (dropWire.send), src);
+endmodule
+
+module probeSink #(snk_t s) (Sink #(t))
+  provisos (ToSink #(snk_t, t), Bits #(t, _));
+
+  let snk = toSink (s);
+
+  Probe #(Bool) probe_canPut <- mkProbe;
+  (* fire_when_enabled, no_implicit_conditions *)
+  rule do_probe_canPut; probe_canPut <= snk.canPut; endrule
+
+  RWire #(t) putWire <- mkRWire;
+  Probe #(Bool) probe_put <- mkProbe;
+  Probe #(t) probe_put_arg <- mkProbe;
+  (* fire_when_enabled, no_implicit_conditions *)
+  rule do_probe_put;
+    let arg = putWire.wget;
+    probe_put <= isValid (arg);
+    probe_put_arg <= fromMaybe (?, arg);
+  endrule
+
+  return onPut (putWire.wset, snk);
+endmodule
+
+module probeSourceSinkShim #(src_snk_t s) (SourceSinkShim #(t))
+  provisos (ToSourceSinkShim #(src_snk_t, t), Bits #(t, _));
+
+  let shim = toSourceSinkShim (s);
+  let src <- probeSource (shim.source);
+  let snk <- probeSink (shim.sink);
+
+  return interface SourceSinkShim;
+    interface source = src;
+    interface sink = snk;
+  endinterface;
+endmodule
 
 ///////////
 // Shims //
