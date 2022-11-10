@@ -35,6 +35,12 @@ import Vector :: *;
 typedef struct {} Proxy #(type t);
 typedef struct {} NumProxy #(numeric type n);
 
+// haskell monad's return
+// (called idM because return is already a keyword)
+// (Monad return from Prelude.bs is not accessible?... only on Modules...)
+////////////////////////////////////////////////////////////////////////////////
+module idM #(t x) (t); return x; endmodule
+
 // cycle counter
 ////////////////////////////////////////////////////////////////////////////////
 
