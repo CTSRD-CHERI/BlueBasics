@@ -216,18 +216,49 @@ endinterface;
 // mapSource / mapSink //
 ////////////////////////////////////////////////////////////////////////////////
 
-function Source #(b) mapSource ( function b f (a x)
-                               , Source #(a) src) = interface Source;
-  method canPeek = src.canPeek;
-  method peek    = f (src.peek);
-  method drop    = src.drop;
-endinterface;
+function Source #(b) mapSource (function b f (a x), src_a src)
+  provisos (ToSource #(src_a, a));
+  Source #(a) s = toSource (src);
+  return interface Source;
+    method canPeek = s.canPeek;
+    method peek    = f (s.peek);
+    method drop    = s.drop;
+  endinterface;
+endfunction
 
-function Sink #(b) mapSink ( function a f (b x)
-                           , Sink #(a) snk) = interface Sink;
-  method canPut  = snk.canPut;
-  method put (x) = snk.put (f (x));
-endinterface;
+function Sink #(b) mapSink (function a f (b x), snk_a snk)
+  provisos (ToSink #(snk_a, a));
+  Sink #(a) s = toSink (snk);
+  return interface Sink;
+    method canPut  = s.canPut;
+    method put (x) = s.put (f (x));
+  endinterface;
+endfunction
+
+////////////////////////////////
+// augment Source / Sink With //
+////////////////////////////////////////////////////////////////////////////////
+
+module augmentSourceWith #(
+    function module #(Empty) f (Bool canPeek, Bool doDrop, t data)
+  , src_t src) (Source #(t)) provisos (ToSource #(src_t, t), Bits #(t, t_sz));
+  Source #(t) s = toSource (src);
+  PulseWire dropWire <- mkPulseWire;
+  Wire #(t) dataWire <- mkDWire (?);
+  (* fire_when_enabled *)
+  rule sampleData; dataWire <= s.peek; endrule
+  f (s.canPeek, dropWire, dataWire);
+  return onDrop (constFn (dropWire.send), s);
+endmodule
+
+module augmentSinkWith #(
+    function module #(Empty) f (Bool canPut, Maybe #(t) data)
+  , snk_t snk) (Sink #(t)) provisos (ToSink #(snk_t, t), Bits #(t, t_sz));
+  Sink #(t) s = toSink (snk);
+  RWire #(t) putWire <- mkRWire;
+  f (s.canPut, putWire.wget);
+  return onPut (putWire.wset, s);
+endmodule
 
 ////////////////////////////////////////
 // augment source/sink with an action //
@@ -437,56 +468,45 @@ endfunction
 // probe source / sink //
 ////////////////////////////////////////////////////////////////////////////////o
 
-module probeSource #(src_t s) (Source #(t))
+module probeSource #(src_t src) (Source #(t))
   provisos (ToSource #(src_t, t), Bits #(t, _));
-
-  let src = toSource (s);
-
-  Probe #(Bool) probe_canPeek <- mkProbe;
-  (* fire_when_enabled, no_implicit_conditions *)
-  rule do_probe_canPeek; probe_canPeek <= src.canPeek; endrule
-
-  Probe #(t) probe_peek <- mkProbe;
-  (* fire_when_enabled *)
-  rule do_probe_peek; probe_peek <= src.peek; endrule
-
-  PulseWire dropWire <- mkPulseWire;
-  Probe #(Bool) probe_drop <- mkProbe;
-  (* fire_when_enabled *)
-  rule do_probe_drop; probe_drop <= dropWire; endrule
-
-  return onDrop (constFn (dropWire.send), src);
+  module f #(Bool canPeek, Bool doDrop, t data) (Empty);
+    Probe #(Bool) canPeek_prb <- mkProbe;
+    Probe #(t) peek_prb <- mkProbe;
+    Probe #(Bool) drop_prb <- mkProbe;
+    (* fire_when_enabled, no_implicit_conditions *)
+    rule probe_signals;
+      canPeek_prb <= canPeek;
+      peek_prb <= data;
+      drop_prb <= doDrop;
+    endrule
+  endmodule
+  let probed <- augmentSourceWith (f, src);
+  return probed;
 endmodule
 
-module probeSink #(snk_t s) (Sink #(t))
+module probeSink #(snk_t snk) (Sink #(t))
   provisos (ToSink #(snk_t, t), Bits #(t, _));
-
-  let snk = toSink (s);
-
-  Probe #(Bool) probe_canPut <- mkProbe;
-  (* fire_when_enabled, no_implicit_conditions *)
-  rule do_probe_canPut; probe_canPut <= snk.canPut; endrule
-
-  RWire #(t) putWire <- mkRWire;
-  Probe #(Bool) probe_put <- mkProbe;
-  Probe #(t) probe_put_arg <- mkProbe;
-  (* fire_when_enabled, no_implicit_conditions *)
-  rule do_probe_put;
-    let arg = putWire.wget;
-    probe_put <= isValid (arg);
-    probe_put_arg <= fromMaybe (?, arg);
-  endrule
-
-  return onPut (putWire.wset, snk);
+  module f #(Bool canPut, Maybe #(t) mData) (Empty);
+    Probe #(Bool) canPut_prb <- mkProbe;
+    Probe #(t) putArg_prb <- mkProbe;
+    Probe #(Bool) put_prb <- mkProbe;
+    (* fire_when_enabled, no_implicit_conditions *)
+    rule probe_signals;
+      canPut_prb <= canPut;
+      putArg_prb <= fromMaybe (?, mData);
+      put_prb <= isValid (mData);
+    endrule
+  endmodule
+  let probed <- augmentSinkWith (f, snk);
+  return probed;
 endmodule
 
 module probeSourceSinkShim #(src_snk_t s) (SourceSinkShim #(t))
   provisos (ToSourceSinkShim #(src_snk_t, t), Bits #(t, _));
-
   let shim = toSourceSinkShim (s);
   let src <- probeSource (shim.source);
   let snk <- probeSink (shim.sink);
-
   return interface SourceSinkShim;
     interface source = src;
     interface sink = snk;
