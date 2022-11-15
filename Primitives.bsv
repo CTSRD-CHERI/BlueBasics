@@ -52,6 +52,12 @@ module mkCycleCount (ReadOnly #(UInt #(n)));
   return regToReadOnly (cycle);
 endmodule
 
+// merge two data chunks according to a mask
+////////////////////////////////////////////////////////////////////////////////
+
+function t mergeWithMask (t mask, t x0, t x1) provisos (Bits #(t, t_sz)) =
+  unpack ((pack (x0) & ~pack (mask)) | (pack (x1) & pack (mask)));
+
 // merge two data chunks with byte enable
 ////////////////////////////////////////////////////////////////////////////////
 
