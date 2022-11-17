@@ -119,13 +119,11 @@ interface RegistrationTable #(type data_t, type key_t);
   method Maybe #(key_t) keyLookup (data_t d);
 endinterface
 
-// TODO
-// decouple state update from the methods to tackle potential method conflicts
 
 module mkRegistrationTable
   // received parameter
   #( parameter NumProxy #(nbEntries) _proxy0
-   , parameter NumProxy #(regsCntSz) _proxy1 )
+   , parameter NumProxy #(maxCnt) _proxy1 )
   // returned interface
   (RegistrationTable #(data_t, key_t))
   // type constraints
@@ -146,12 +144,12 @@ module mkRegistrationTable
   Vector #(nbEntries, Reg #(data_t)) entries <- replicateM (mkRegU);
   Vector #(nbEntries, data_t) entriesRead = readVReg (entries);
   Vector #(nbEntries, FIFOF #(Bit #(0)))
-    counters <- replicateM (mkUGSizedFIFOF (valueOf (regsCntSz)));
+    counters <- replicateM (mkUGSizedFIFOF (valueOf (maxCnt)));
 
   function idx_t key2idx (key_t k) = unpack (truncate (pack (k)));
   function key_t idx2key (idx_t i) = unpack (zeroExtend (pack (i)));
   function dLookup (k) =
-    (counters[key2idx (k)].notEmpty) ? tagged Valid entries[key2idx (k)]
+    (counters[key2idx (k)].notEmpty) ? tagged Valid entriesRead[key2idx (k)]
                                      : Invalid;
 
   // Interface
