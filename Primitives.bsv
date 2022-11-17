@@ -29,6 +29,7 @@
 package Primitives;
 
 import Vector :: *;
+import FIFOF :: *;
 
 // un-inhabited type for the purpose of passing type information
 ////////////////////////////////////////////////////////////////////////////////
@@ -130,29 +131,27 @@ module mkRegistrationTable
   // type constraints
   provisos ( // usage contraints
              Bits #(key_t, key_sz)
+           , Add#(buffer_sz, TLog#(nbEntries), key_sz)
            , Bits #(data_t, data_sz)
-           , Eq #(key_t)
            , Eq #(data_t)
-             // local aliases
-           , Alias #(cnt_t, Bit #(regsCntSz))
-           , Alias #(entry_t, Tuple3 #(key_t, data_t, cnt_t)) );
+            // local aliases
+           , Alias #(idx_t, UInt #(TLog#(nbEntries)))
+           );
 
   // Local definitions
   ////////////////////
 
   // vector of registration entries
   // (Note: an entry with a count of 0 is an available entry)
-  Vector #(nbEntries, Reg #(entry_t))
-    entries <- replicateM (mkReg (tuple3 (?, ?, 0)));
-  Vector #(nbEntries, entry_t) entriesRead = readVReg (entries);
-
-  // set of tracked keys
-  IntSet #(key_sz) keySet <- mkIntSet;
-
-  // entry querry functions
-  function Bool matchKey   (key_t k, entry_t e) = tpl_1 (e) == k;
-  function Bool matchData (data_t d, entry_t e) = tpl_2 (e) == d;
-  function Bool matchCnt   (cnt_t c, entry_t e) = tpl_3 (e) == c;
+  Vector #(nbEntries, Reg #(data_t))
+    entries <- replicateM (mkRegU);
+  Vector #(nbEntries, data_t) entriesRead = readVReg (entries);
+  Vector #(nbEntries, FIFOF #(Bit#(0)))
+    counters <- replicateM (mkUGSizedFIFOF (valueOf(regsCntSz)));
+  
+  function idx_t key2idx(key_t k) = unpack(truncate(pack(k)));
+  function key_t idx2key(idx_t i) = unpack(zeroExtend(pack(i)));
+  function dLookup (k) = (counters[key2idx(k)].notEmpty) ? tagged Valid entries[key2idx(k)] : Invalid;
 
   // Interface
   ////////////
@@ -170,31 +169,26 @@ module mkRegistrationTable
   // An Invalid return value signifies that no action took place
   method registerData (d) = actionvalue
     let mKey = Invalid; // prepare an Invalid return value by default
-    let mIdx = findIndex (matchData (d), entriesRead);
+    let mIdx = findElem (d, entriesRead);
     case (mIdx) matches
       // (Note: could match an empty/available registration slot, which is OK)
       tagged Valid .idx: begin
-        match {.eKey, .eData, .eCnt} = entriesRead[idx];
         // for not already full entries only
-        if (eCnt != ~0) begin
+        if (counters[idx].notFull) begin
           // update the existing entry
-          entries[idx] <= tuple3 (eKey, eData, eCnt + 1);
-          mKey = tagged Valid eKey; // return the existing key
+          counters[idx].enq(?);
+          mKey = tagged Valid idx2key(idx); // return the existing key
         end
       end
       default: begin // there is no existing matching registration, look for an
                      // available empty entry
-        case (findIndex (matchCnt (0), entriesRead)) matches
+        function isEmpty(ff) = !ff.notEmpty;
+        case (findIndex (isEmpty, counters)) matches
           tagged Valid .idx: begin
-            case (keySet.findFirstFree) matches // look for an available key
-              tagged Valid .rawKey: begin
-                let key = unpack (rawKey);
-                // allocate the new registration by updating the selected entry
-                entries[idx] <= tuple3 (key, d, 1);
-                keySet.insert (key); // insert the new key in the key set
-                mKey = tagged Valid key; // return the new key
-              end
-            endcase
+            // allocate the new registration by updating the selected entry
+            entries[idx] <= d;
+            counters[idx].enq(?);
+            mKey = tagged Valid idx2key(idx); // return the new key
           end
         endcase
       end
@@ -210,26 +204,16 @@ module mkRegistrationTable
   // associated with the registration being removed
   // An Invalid return value signifies that no action took place
   method deRegisterKey (k) = actionvalue
-    let mData = Invalid; // prepare an Invalid return value by default
-    let mIdx = findIndex (matchKey (k), entriesRead);
-    case (mIdx) matches
-      tagged Valid .idx: begin
-        match {.eKey, .eData, .eCnt} = entriesRead[idx];
-        if (eCnt > 0) begin // for non-empty entries only
-          // update the existing entry
-          entries[idx] <= tuple3 (eKey, eData, eCnt - 1);
-          if (eCnt == 1) // for last de-registration
-            keySet.delete (pack (eKey)); // delete from tracked key set
-          mData = tagged Valid eData; // return the de-registered data
-        end
-      end
-    endcase
-    return mData;
+    if (counters[key2idx(k)].notEmpty) counters[key2idx(k)].deq;
+    return dLookup(k);
   endactionvalue;
   // lookup the data associated with a key
-  method dataLookup (k) = fmap (tpl_2, find (matchKey (k), entriesRead));
+  method dataLookup (k) = dLookup(k);
   // lookup the key associated with a piece of data
-  method keyLookup (d) = fmap (tpl_1, find (matchData (d), entriesRead));
+  method keyLookup (d);
+    if (findElem (d, entriesRead) matches tagged Valid .i) return tagged Valid idx2key(i);
+    else return Invalid;
+  endmethod
 
 endmodule
 
