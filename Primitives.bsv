@@ -119,6 +119,24 @@ interface RegistrationTable #(type data_t, type key_t);
   method Maybe #(key_t) keyLookup (data_t d);
 endinterface
 
+module mkFullRegistrationTable
+  // received parameter
+  #(parameter NumProxy #(maxCnt) proxyMaxCnt)
+  // returned interface
+  (RegistrationTable #(data_t, key_t))
+  // type constraints
+  provisos ( // usage contraints
+             Bits #(key_t, key_sz)
+           , Add #(_, TLog #(TExp #(key_sz)), key_sz) // really...
+           , Bits #(data_t, data_sz)
+           , Eq #(data_t)
+            // local aliases
+           , Alias #(idx_t, UInt #(TLog #(nbEntries)))
+           );
+  NumProxy #(TExp #(key_sz)) proxyNbEntries = ?;
+  let ifc <- mkRegistrationTable (proxyNbEntries, proxyMaxCnt);
+  return ifc;
+endmodule
 
 module mkRegistrationTable
   // received parameter
