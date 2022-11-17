@@ -131,11 +131,11 @@ module mkRegistrationTable
   // type constraints
   provisos ( // usage contraints
              Bits #(key_t, key_sz)
-           , Add#(buffer_sz, TLog#(nbEntries), key_sz)
+           , Add#(_, TLog #(nbEntries), key_sz)
            , Bits #(data_t, data_sz)
            , Eq #(data_t)
             // local aliases
-           , Alias #(idx_t, UInt #(TLog#(nbEntries)))
+           , Alias #(idx_t, UInt #(TLog #(nbEntries)))
            );
 
   // Local definitions
@@ -143,15 +143,16 @@ module mkRegistrationTable
 
   // vector of registration entries
   // (Note: an entry with a count of 0 is an available entry)
-  Vector #(nbEntries, Reg #(data_t))
-    entries <- replicateM (mkRegU);
+  Vector #(nbEntries, Reg #(data_t)) entries <- replicateM (mkRegU);
   Vector #(nbEntries, data_t) entriesRead = readVReg (entries);
-  Vector #(nbEntries, FIFOF #(Bit#(0)))
-    counters <- replicateM (mkUGSizedFIFOF (valueOf(regsCntSz)));
-  
-  function idx_t key2idx(key_t k) = unpack(truncate(pack(k)));
-  function key_t idx2key(idx_t i) = unpack(zeroExtend(pack(i)));
-  function dLookup (k) = (counters[key2idx(k)].notEmpty) ? tagged Valid entries[key2idx(k)] : Invalid;
+  Vector #(nbEntries, FIFOF #(Bit #(0)))
+    counters <- replicateM (mkUGSizedFIFOF (valueOf (regsCntSz)));
+
+  function idx_t key2idx (key_t k) = unpack (truncate (pack (k)));
+  function key_t idx2key (idx_t i) = unpack (zeroExtend (pack (i)));
+  function dLookup (k) =
+    (counters[key2idx (k)].notEmpty) ? tagged Valid entries[key2idx (k)]
+                                     : Invalid;
 
   // Interface
   ////////////
@@ -161,9 +162,8 @@ module mkRegistrationTable
   //   * if it is, and if there is room for another registration in the already
   //     allocated entry, we increment the count of the entry
   //   * if the data is not already associated with an existing registration, if
-  //     there is an available entry and an available key, we claim the entry
-  //     with the (data, key) pair and an initial count of 1, and we insert the
-  //     key in the tracked key set
+  //     there is an available entry, we claim the entry for our data and return
+  //     its index as a key
   // On successful registration, we return a Valid result containing the key
   // associated with the registration
   // An Invalid return value signifies that no action took place
@@ -171,24 +171,28 @@ module mkRegistrationTable
     let mKey = Invalid; // prepare an Invalid return value by default
     let mIdx = findElem (d, entriesRead);
     case (mIdx) matches
-      // (Note: could match an empty/available registration slot, which is OK)
+      // We matched an existing registration (or, we might have matched an
+      // empty/available registration slot with the same old data, which is in
+      // fact ok to use)
       tagged Valid .idx: begin
         // for not already full entries only
         if (counters[idx].notFull) begin
           // update the existing entry
-          counters[idx].enq(?);
-          mKey = tagged Valid idx2key(idx); // return the existing key
+          counters[idx].enq (?);
+          // return the registration index as the key
+          mKey = tagged Valid idx2key (idx);
         end
       end
-      default: begin // there is no existing matching registration, look for an
-                     // available empty entry
-        function isEmpty(ff) = !ff.notEmpty;
+      // There is no existing matching registration, look for an available empty
+      // entry
+      default: begin
+        function isEmpty (ff) = !ff.notEmpty;
         case (findIndex (isEmpty, counters)) matches
           tagged Valid .idx: begin
             // allocate the new registration by updating the selected entry
             entries[idx] <= d;
-            counters[idx].enq(?);
-            mKey = tagged Valid idx2key(idx); // return the new key
+            counters[idx].enq (?);
+            mKey = tagged Valid idx2key (idx); // return the new key
           end
         endcase
       end
@@ -196,22 +200,21 @@ module mkRegistrationTable
     return mKey;
   endactionvalue;
   // To record a de-registration on a given key:
-  // - we look for an existing entry with the same key
+  // - we look for an existing entry for the given key
   // - we update the entry decrementing its counter
-  // - if it was the last registration in the entry, we delete the key from
-  //   the tracked key set
   // On successful de-registration, we return a Valid result containing the data
   // associated with the registration being removed
   // An Invalid return value signifies that no action took place
   method deRegisterKey (k) = actionvalue
-    if (counters[key2idx(k)].notEmpty) counters[key2idx(k)].deq;
-    return dLookup(k);
+    if (counters[key2idx (k)].notEmpty) counters[key2idx (k)].deq;
+    return dLookup (k);
   endactionvalue;
   // lookup the data associated with a key
-  method dataLookup (k) = dLookup(k);
+  method dataLookup = dLookup;
   // lookup the key associated with a piece of data
   method keyLookup (d);
-    if (findElem (d, entriesRead) matches tagged Valid .i) return tagged Valid idx2key(i);
+    if (findElem (d, entriesRead) matches tagged Valid .i)
+      return tagged Valid idx2key (i);
     else return Invalid;
   endmethod
 
