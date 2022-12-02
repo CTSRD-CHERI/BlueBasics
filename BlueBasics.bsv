@@ -38,6 +38,7 @@ import MasterSlave :: *;
 import Primitives :: *;
 import Monitored :: *;
 import Routable :: *;
+import SignalProbe :: *;
 
 export Monoid :: *;
 export ListExtra :: *;
@@ -49,5 +50,6 @@ export MasterSlave :: *;
 export Primitives :: *;
 export Monitored :: *;
 export Routable :: *;
+export SignalProbe :: *;
 
 endpackage
