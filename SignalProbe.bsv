@@ -2,13 +2,15 @@ package SignalProbe;
 
 export mkSignalProbe;
 
-module mkSignalProbe #(Bit #(n) x) (Empty);
+module mkSignalProbe #(t x) (Empty) provisos (Bits #(t, t_sz));
   if (genVerilog) vSignalProbe (x);
 endmodule
 
-import "BVI" SignalProbe = module vSignalProbe #(Bit #(n) x) (Empty);
+import "BVI" SignalProbe =
+  module vSignalProbe #(t x) (Empty) provisos (Bits #(t, n));
   parameter N = valueOf (n);
-  port sig = x;
+  port sig = pack (x);
+  default_clock dClk (clk);
 endmodule
 
 endpackage
