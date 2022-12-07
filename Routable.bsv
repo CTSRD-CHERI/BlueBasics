@@ -60,6 +60,15 @@ endtypeclass
 instance Routable #(a, b) provisos (Has_routingField #(a, b), Has_isLast #(a));
 endinstance
 
+///////////////////////
+// Has payload class //
+////////////////////////////////////////////////////////////////////////////////
+
+typeclass Has_payload #(type t, type payload_t)
+  dependencies (t determines payload_t);
+  function payload_t payload (t x);
+endtypeclass
+
 /////////////////////////
 // FallibleRoute class //
 ////////////////////////////////////////////////////////////////////////////////
@@ -114,6 +123,9 @@ endinstance
 instance Has_isLast #(WithRouteInfo #(t, r_t)) provisos (Has_isLast #(t));
   function isLast (x) = isLast (x.payload);
 endinstance
+instance Has_payload #(WithRouteInfo #(t, r_t), t);
+  function payload (x) = x.payload;
+endinstance
 
 // The WithMetaInfo type wraps a type with meta information and uses the
 // wrapped type's implementation of "routingField" and "isLast"
@@ -128,6 +140,11 @@ endinstance
 instance Has_isLast #(WithMetaInfo #(t, m_t)) provisos (Has_isLast #(t));
   function isLast (x) = isLast (x.payload);
 endinstance
+instance Has_payload #(WithMetaInfo #(t, m_t), t);
+  function payload (x) = x.payload;
+endinstance
+
+////////////////////////////////////////////////////////////////////////////////
 
 // Routing function from index to one hot vector
 // XXX Note: special case for idx type of Bit #(0) as it does not seam to yield
