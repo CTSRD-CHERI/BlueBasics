@@ -39,6 +39,7 @@ package SourceSink;
 
 import Vector :: *;
 import FIFOF :: *;
+import Clocks :: *;
 import Probe :: *;
 import SpecialFIFOs :: *;
 import GetPut :: *;
@@ -102,6 +103,14 @@ instance ToSource #(FIFOF #(t), t);
   endinterface;
 endinstance
 
+instance ToSource #(SyncFIFOIfc #(t), t);
+  function toSource (ff) = interface Source #(t);
+    method canPeek = ff.notEmpty;
+    method peek    = ff.first;
+    method drop    = ff.deq;
+  endinterface;
+endinstance
+
 /*
 instance ToSource #(RWire #(t), t);
   function toSource (w) = interface Source #(t);
@@ -143,6 +152,13 @@ instance ToSink #(SourceSinkShim #(t), t);
 endinstance
 
 instance ToSink #(FIFOF #(t), t);
+  function toSink (ff) = interface Sink;
+    method canPut = ff.notFull;
+    method put    = ff.enq;
+  endinterface;
+endinstance
+
+instance ToSink #(SyncFIFOIfc #(t), t);
   function toSink (ff) = interface Sink;
     method canPut = ff.notFull;
     method put    = ff.enq;
