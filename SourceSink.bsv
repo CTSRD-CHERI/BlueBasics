@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2018-2022 Alexandre Joannou
+ * Copyright (c) 2018-2023 Alexandre Joannou
  * Copyright (c) 2019 Peter Rugg
  * Copyright (c) 2019 Jonathan Woodruff
  * All rights reserved.
@@ -55,14 +55,32 @@ interface Source #(type t);
   method Action drop;
 endinterface
 
+(* always_ready, always_enabled *)
+interface Source_Sig #(type t);
+  method Bool sourceValid;
+  method t data;
+  (* prefix="" *) method Action produce (Bool sinkReady);
+endinterface
+
 interface Sink #(type t);
   (* always_ready *) method Bool canPut;
   method Action put (t val);
 endinterface
 
+(* always_ready, always_enabled *)
+interface Sink_Sig #(type t);
+  method Bool sinkReady;
+  (* prefix="" *) method Action consume (Bool sourceValid, t data);
+endinterface
+
 interface SourceSinkShim #(type t);
   interface Source #(t) source;
   interface Sink   #(t) sink;
+endinterface
+
+interface SourceSinkShim_Sig #(type t);
+  interface Source_Sig #(t) source;
+  interface Sink_Sig   #(t) sink;
 endinterface
 
 //////////////////////
@@ -137,6 +155,14 @@ instance ToSource #(PulseWire, Bit #(0));
 endinstance
 */
 
+module toSource_Sig #(src_t src) (Source_Sig #(t))
+  provisos (ToSource #(src_t, t), Bits #(t, _));
+  let s <- toUnguardedSource (src, ?);
+  method sourceValid = s.canPeek;
+  method data = s.peek;
+  method produce (snkRdy) = action if (snkRdy && s.canPeek) s.drop; endaction;
+endmodule
+
 // ToSink
 
 typeclass ToSink #(type a, type b) dependencies (a determines b);
@@ -188,6 +214,15 @@ instance ToSink #(PulseWire, Bool);
 endinstance
 */
 
+module toSink_Sig #(snk_t snk) (Sink_Sig #(t))
+  provisos (ToSink #(snk_t, t), Bits #(t, _));
+  let s <- toUnguardedSink (snk);
+  method sinkReady = s.canPut;
+  method consume (srcVld, data) = action
+    if (srcVld && s.canPut) s.put (data);
+  endaction;
+endmodule
+
 // ToSourceSinkShim
 
 typeclass ToSourceSinkShim #(type a, type b) dependencies (a determines b);
@@ -200,6 +235,15 @@ instance ToSourceSinkShim #(a, b) provisos ( ToSource #(a, b), ToSink #(a, b));
     interface   sink =   toSink (x);
   endinterface;
 endinstance
+
+module toSourceSinkShim_Sig #(src_snk_t s) (SourceSinkShim_Sig #(t))
+  provisos (ToSourceSinkShim #(src_snk_t, t), Bits #(t, _));
+  let shim = toSourceSinkShim (s);
+  let src <- toSource_Sig (shim.source);
+  let snk <-   toSink_Sig (shim.sink);
+  interface source = src;
+  interface sink = snk;
+endmodule
 
 // Common Source / Sink constructors
 ////////////////////////////////////////////////////////////////////////////////
