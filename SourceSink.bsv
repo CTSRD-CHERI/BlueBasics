@@ -637,6 +637,102 @@ endfunction
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
+// narrow / widen Bit sources and sinks
+// (turn one big flit into a series of smaller ones)
+
+module toNarrowBitSource #(t_src wideSrc) (Source #(Bit #(narrowN)))
+  provisos ( Alias #(t_vec, Vector #(n, Bit #(narrowN)))
+           , ToSource #(t_src, t_in)
+           , Bits #(t_in, wideN)
+           , Bits #(t_vec, wideN)
+           );
+  let src = toSource (wideSrc);
+  let cnt <- mkCReg (2, Invalid);
+  Reg #(t_vec) shiftReg[2] <- mkCRegU (2);
+  rule consumeFromOriginalSource (! isValid (cnt[0]) && src.canPeek);
+    shiftReg[0] <= unpack (pack (src.peek));
+    src.drop;
+    cnt[0] <= Valid (0);
+  endrule
+  method canPeek = isValid (cnt[1]);
+  method peek if (isValid (cnt[1])) = pack (shiftReg[1][0]);
+  method drop if (isValid (cnt[1])) = action
+    shiftReg[1] <= shiftOutFrom0 (?, shiftReg[1], 1);
+    let cntVal = cnt[1].Valid;
+    cnt[1] <= (cntVal == fromInteger (valueOf(n)-1)) ? Invalid
+                                                     : Valid (cntVal + 1);
+  endaction;
+endmodule
+
+module toWideBitSource #(t_src narrowSrc) (Source #(Bit #(wideN)))
+  provisos ( Alias #(t_vec, Vector #(n, Bit #(narrowN)))
+           , ToSource #(t_src, t_in)
+           , Bits #(t_in, narrowN)
+           , Bits #(t_vec, wideN)
+           );
+  let src = toSource (narrowSrc);
+  let cnt <- mkCReg (2, Valid (0));
+  Reg #(t_vec) shiftReg[2] <- mkCRegU (2);
+  rule consumeFromOriginalSource (isValid (cnt[0]) && src.canPeek);
+    shiftReg[0] <= shiftInAtN (shiftReg[0], pack (src.peek));
+    src.drop;
+    let cntVal = cnt[0].Valid;
+    cnt[0] <= (cntVal == fromInteger (valueOf(n)-1)) ? Invalid
+                                                     : Valid (cntVal + 1);
+  endrule
+  method canPeek = ! isValid (cnt[1]);
+  method peek if (! isValid (cnt[1])) = pack (shiftReg[1]);
+  method drop if (! isValid (cnt[1])) = writeReg (cnt[1], Valid (0));
+endmodule
+
+module toNarrowBitSink #(t_snk wideSnk) (Sink #(Bit #(narrowN)))
+  provisos ( Alias #(t_vec, Vector #(n, Bit #(narrowN)))
+           , ToSink #(t_snk, t_out)
+           , Bits #(t_out, wideN)
+           , Bits #(t_vec, wideN)
+           );
+  let snk = toSink (wideSnk);
+  let cnt <- mkCReg (2, Valid (0));
+  Reg #(t_vec) shiftReg[2] <- mkCRegU (2);
+  rule produceToOriginalSink (! isValid (cnt[1]) && snk.canPut);
+    snk.put (unpack (pack (shiftReg[1])));
+    cnt[1] <= Valid (0);
+  endrule
+  method canPut = isValid (cnt[0]);
+  method put (x) if (isValid (cnt[0])) = action
+    shiftReg[0] <= shiftInAtN (shiftReg[0], x);
+    let cntVal = cnt[0].Valid;
+    cnt[0] <= (cntVal == fromInteger (valueOf(n)-1)) ? Invalid
+                                                     : Valid (cntVal + 1);
+  endaction;
+endmodule
+
+module toWideBitSink #(t_snk narrowSnk) (Sink #(Bit #(wideN)))
+  provisos ( Alias #(t_vec, Vector #(n, Bit #(narrowN)))
+           , ToSink #(t_snk, t_out)
+           , Bits #(t_out, narrowN)
+           , Bits #(t_vec, wideN)
+           );
+  let snk = toSink (narrowSnk);
+  let cnt <- mkCReg (2, Invalid);
+  Reg #(t_vec) shiftReg[2] <- mkCRegU (2);
+  rule produceToOriginalSink (isValid (cnt[1]) && snk.canPut);
+    snk.put (unpack (shiftReg[1][0]));
+    shiftReg[1] <= shiftOutFrom0 (?, shiftReg[1], 1);
+    let cntVal = cnt[1].Valid;
+    cnt[1] <= (cntVal == fromInteger (valueOf(n)-1)) ? Invalid
+                                                     : Valid (cntVal + 1);
+  endrule
+  method canPut = ! isValid (cnt[0]);
+  method put (x) if (! isValid (cnt[0])) = action
+    shiftReg[0] <= unpack (pack (x));
+    cnt[0] <= Valid (0);
+  endaction;
+endmodule
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 // Source and Sink merging/spliting API
 //
 // We aim to provide a set of functions (or modules) to help merging several
