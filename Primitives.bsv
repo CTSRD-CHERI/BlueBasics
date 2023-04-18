@@ -31,6 +31,8 @@ package Primitives;
 import Vector :: *;
 import FIFOF :: *;
 
+import Virtualizable :: *;
+
 // un-inhabited type for the purpose of passing type information
 ////////////////////////////////////////////////////////////////////////////////
 typedef struct {} Proxy #(type t);
@@ -118,6 +120,24 @@ interface RegistrationTable #(type data_t, type key_t);
   method Maybe #(data_t) dataLookup (key_t t);
   method Maybe #(key_t) keyLookup (data_t d);
 endinterface
+
+instance Virtualizable #(RegistrationTable #(data_t, key_t));
+  module virtualize #(RegistrationTable #(data_t, key_t) x, Integer n)
+                      (Array #(RegistrationTable #(data_t, key_t)));
+    RegistrationTable #(data_t, key_t) ifc[n];
+
+    for (Integer i = 0; i < n; i = i + 1) begin
+      ifc[i] = interface RegistrationTable #(data_t, key_t);
+        method registerData = x.registerData;
+        method deRegisterKey = x.deRegisterKey;
+        method dataLookup = x.dataLookup;
+        method keyLookup = x.keyLookup;
+      endinterface;
+    end
+
+    return ifc;
+  endmodule
+endinstance
 
 module mkFullRegistrationTable
   // received parameter
