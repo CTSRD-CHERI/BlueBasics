@@ -180,6 +180,7 @@ module mkRegistrationTable
   // vector of registration entries
   // (Note: an entry with a count of 0 is an available entry)
   Vector #(nbEntries, Reg #(data_t)) entries <- replicateM (mkRegU);
+  Reg #(Vector #(nbEntries, Bool)) allocated[2] <- mkCReg(2, replicate(False));
   Vector #(nbEntries, data_t) entriesRead = readVReg (entries);
   Vector #(nbEntries, FIFOF #(Bit #(0)))
     counters <- replicateM (mkUGSizedFIFOF (valueOf (maxCnt)));
@@ -189,6 +190,14 @@ module mkRegistrationTable
   function dLookup (k) =
     (counters[key2idx (k)].notEmpty) ? tagged Valid entriesRead[key2idx (k)]
                                      : Invalid;
+
+  // Rules
+  ////////
+  (* fire_when_enabled *)
+  rule garbageCollect (\and (allocated[0]));
+    function notEmpty (ff) = ff.notEmpty;
+    allocated[0] <= map (notEmpty, counters);
+  endrule
 
   // Interface
   ////////////
@@ -219,20 +228,24 @@ module mkRegistrationTable
           mKey = tagged Valid idx2key (idx);
         end
       end
-      // There is no existing matching registration, look for an available empty
-      // entry
+      // There is no existing matching registration, look for an available entry
       default: begin
-        function isEmpty (ff) = !ff.notEmpty;
-        case (findIndex (isEmpty, counters)) matches
+        function isAvailable (args);
+          match {.ff, .alloc} = args;
+          return !ff.notEmpty && !alloc;
+        endfunction
+        case (findIndex (isAvailable, zip (counters, allocated[1]))) matches
           tagged Valid .idx: begin
             // allocate the new registration by updating the selected entry
             entries[idx] <= d;
+            allocated[1][idx] <= True;
             counters[idx].enq (?);
             mKey = tagged Valid idx2key (idx); // return the new key
           end
         endcase
       end
     endcase
+    $display("RegistrationTable: 0x%x -> %b 0x%x", d, isValid(mKey), mKey.Valid);
     return mKey;
   endactionvalue;
   // To record a de-registration on a given key:
