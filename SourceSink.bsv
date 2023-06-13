@@ -39,6 +39,7 @@ package SourceSink;
 
 import Vector :: *;
 import FIFOF :: *;
+import FIFOLevel::*;
 import Clocks :: *;
 import Probe :: *;
 import SpecialFIFOs :: *;
@@ -129,6 +130,38 @@ instance ToSource #(SyncFIFOIfc #(t), t);
   endinterface;
 endinstance
 
+instance ToSource #(FIFOLevelIfc #(t, _), t);
+  function toSource (ff) = interface Source #(t);
+    method canPeek = ff.notEmpty;
+    method peek    = ff.first;
+    method drop    = ff.deq;
+  endinterface;
+endinstance
+
+instance ToSource #(SyncFIFOLevelIfc #(t, _), t);
+  function toSource (ff) = interface Source #(t);
+    method canPeek = ff.dNotEmpty;
+    method peek    = ff.first;
+    method drop    = ff.deq;
+  endinterface;
+endinstance
+
+instance ToSource #(FIFOCountIfc #(t, _), t);
+  function toSource (ff) = interface Source #(t);
+    method canPeek = ff.notEmpty;
+    method peek    = ff.first;
+    method drop    = ff.deq;
+  endinterface;
+endinstance
+
+instance ToSource #(SyncFIFOCountIfc #(t, _), t);
+  function toSource (ff) = interface Source #(t);
+    method canPeek = ff.dNotEmpty;
+    method peek    = ff.first;
+    method drop    = ff.deq;
+  endinterface;
+endinstance
+
 /*
 instance ToSource #(RWire #(t), t);
   function toSource (w) = interface Source #(t);
@@ -187,6 +220,34 @@ endinstance
 instance ToSink #(SyncFIFOIfc #(t), t);
   function toSink (ff) = interface Sink;
     method canPut = ff.notFull;
+    method put    = ff.enq;
+  endinterface;
+endinstance
+
+instance ToSink #(FIFOLevelIfc #(t, _), t);
+  function toSink (ff) = interface Sink;
+    method canPut = ff.notFull;
+    method put    = ff.enq;
+  endinterface;
+endinstance
+
+instance ToSink #(SyncFIFOLevelIfc #(t, _), t);
+  function toSink (ff) = interface Sink;
+    method canPut = ff.sNotFull;
+    method put    = ff.enq;
+  endinterface;
+endinstance
+
+instance ToSink #(FIFOCountIfc #(t, _), t);
+  function toSink (ff) = interface Sink;
+    method canPut = ff.notFull;
+    method put    = ff.enq;
+  endinterface;
+endinstance
+
+instance ToSink #(SyncFIFOCountIfc #(t, _), t);
+  function toSink (ff) = interface Sink;
+    method canPut = ff.sNotFull;
     method put    = ff.enq;
   endinterface;
 endinstance
