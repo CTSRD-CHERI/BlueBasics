@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2018-2022 Alexandre Joannou
+ * Copyright (c) 2018-2023 Alexandre Joannou
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -76,6 +76,50 @@ instance Connectable #(Slave #(t_req, t_rsp), Master #(t_req, t_rsp))
   endmodule
 endinstance
 
+instance Connectable #( Master #(t_req, t_rsp)
+                      , Tuple2 #(Sink #(t_req), Source #(t_rsp)) )
+  provisos (Bits #(t_req, _a), Bits #(t_rsp, _b));
+  module mkConnection #( Master #(t_req, t_rsp) m
+                       , Tuple2 #(Sink #(t_req), Source #(t_rsp)) t )
+                       (Empty);
+    mkConnection (m.req, tpl_1 (t));
+    mkConnection (m.rsp, tpl_2 (t));
+  endmodule
+endinstance
+
+instance Connectable #( Tuple2 #(Sink #(t_req), Source #(t_rsp))
+                      , Master #(t_req, t_rsp) )
+  provisos (Bits #(t_req, _a), Bits #(t_rsp, _b));
+  module mkConnection #( Tuple2 #(Sink #(t_req), Source #(t_rsp)) t
+                       , Master #(t_req, t_rsp) m )
+                       (Empty);
+    mkConnection (tpl_1 (t), m.req);
+    mkConnection (tpl_2 (t), m.rsp);
+  endmodule
+endinstance
+
+instance Connectable #( Tuple2 #(Source #(t_req), Sink #(t_rsp))
+                      , Slave #(t_req, t_rsp) )
+  provisos (Bits #(t_req, _a), Bits #(t_rsp, _b));
+  module mkConnection #( Tuple2 #(Source #(t_req), Sink #(t_rsp)) t
+                       , Slave #(t_req, t_rsp) s )
+                       (Empty);
+    mkConnection (tpl_1 (t), s.req);
+    mkConnection (tpl_2 (t), s.rsp);
+  endmodule
+endinstance
+
+instance Connectable #( Slave #(t_req, t_rsp)
+                      , Tuple2 #(Source #(t_req), Sink #(t_rsp)) )
+  provisos (Bits #(t_req, _a), Bits #(t_rsp, _b));
+  module mkConnection #( Slave #(t_req, t_rsp) s
+                       , Tuple2 #(Source #(t_req), Sink #(t_rsp)) t )
+                       (Empty);
+    mkConnection (tpl_1 (t), s.req);
+    mkConnection (tpl_2 (t), s.rsp);
+  endmodule
+endinstance
+
 ///////////
 // Debug //
 ////////////////////////////////////////////////////////////////////////////////
@@ -103,5 +147,21 @@ function Source #(t_req) getMasterReqIfc (Master #(t_req, t) m) = m.req;
 function Sink   #(t_rsp) getMasterRspIfc (Master #(t, t_rsp) m) = m.rsp;
 function Sink   #(t_req) getSlaveReqIfc  (Slave #(t_req, t) s)  = s.req;
 function Source #(t_rsp) getSlaveRspIfc  (Slave #(t, t_rsp) s)  = s.rsp;
+
+function Master #(res_req, res_rsp) mapMaster ( function res_req fReq (req r)
+                                              , function rsp fRsp (res_rsp r)
+                                              , Master #(req, rsp) m ) =
+  interface Master;
+    interface req = mapSource (fReq, m.req);
+    interface rsp = mapSink (fRsp, m.rsp);
+  endinterface;
+
+function Slave #(res_req, res_rsp) mapSlave ( function req fReq (res_req r)
+                                            , function res_rsp fRsp (rsp r)
+                                            , Slave #(req, rsp) s ) =
+  interface Slave;
+    interface req = mapSink (fReq, s.req);
+    interface rsp = mapSource (fRsp, s.rsp);
+  endinterface;
 
 endpackage
