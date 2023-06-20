@@ -510,6 +510,50 @@ instance Connectable #(Get #(t), Sink #(t));
 endinstance
 */
 
+instance Connectable #(Source_Sig #(t), Sink_Sig #(t))
+  provisos (Bits #(t, t_sz));
+  module mkConnection #(Source_Sig #(t) src, Sink_Sig #(t) snk) (Empty);
+    (* fire_when_enabled, no_implicit_conditions *)
+    rule connect;
+      snk.consume (src.sourceValid, src.data);
+      src.produce (snk.sinkReady);
+    endrule
+  endmodule
+endinstance
+
+instance Connectable #(Sink_Sig #(t), Source_Sig #(t))
+  provisos (Bits #(t, t_sz));
+  module mkConnection #(Sink_Sig #(t) snk, Source_Sig #(t) src) (Empty);
+    mkConnection (src, snk);
+  endmodule
+endinstance
+
+instance Connectable #(Source_Sig #(t), Sink #(t)) provisos (Bits #(t, t_sz));
+  module mkConnection #(Source_Sig #(t) srcSig, Sink #(t) snk) (Empty);
+    let snkSig <- toSink_Sig (snk);
+    mkConnection (srcSig, snkSig);
+  endmodule
+endinstance
+
+instance Connectable #(Sink #(t), Source_Sig #(t)) provisos (Bits #(t, t_sz));
+  module mkConnection #(Sink #(t) snk, Source_Sig #(t) srcSig) (Empty);
+    mkConnection (srcSig, snk);
+  endmodule
+endinstance
+
+instance Connectable #(Source #(t), Sink_Sig #(t)) provisos (Bits #(t, t_sz));
+  module mkConnection #(Source #(t) src, Sink_Sig #(t) snkSig) (Empty);
+    let srcSig <- toSource_Sig (src);
+    mkConnection (srcSig, snkSig);
+  endmodule
+endinstance
+
+instance Connectable #(Sink_Sig #(t), Source #(t)) provisos (Bits #(t, t_sz));
+  module mkConnection #(Sink_Sig #(t) snkSig, Source #(t) src) (Empty);
+    mkConnection (src, snkSig);
+  endmodule
+endinstance
+
 ////////////////////////////////////
 // toUnguardedSource/Sink modules //
 ////////////////////////////////////////////////////////////////////////////////
