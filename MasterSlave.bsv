@@ -52,6 +52,18 @@ interface Slave #(type t_req, type t_rsp);
   interface Source #(t_rsp) rsp;
 endinterface
 
+// constructors
+function Master #(a, b) toMaster (src_a src, snk_b snk)
+  provisos (ToSource #(src_a, a), ToSink #(snk_b, b)) = interface Master;
+  interface req = toSource (src);
+  interface rsp = toSink (snk);
+endinterface;
+function Slave #(a, b) toSlave (snk_a snk, src_b src)
+  provisos (ToSink #(snk_a, a), ToSource #(src_b, b)) = interface Slave;
+  interface req = toSink (snk);
+  interface rsp = toSource (src);
+endinterface;
+
 ///////////////////////////
 // Connectable instances //
 ////////////////////////////////////////////////////////////////////////////////
