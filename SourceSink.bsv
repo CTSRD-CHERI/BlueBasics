@@ -753,19 +753,30 @@ endmodule
 
 // debug wrapping
 ////////////////////////////////////////////////////////////////////////////////
-function Source #(t) debugSource (Source #(t) src, Fmt msg)
-  provisos (FShow #(t)) =
-  onDrop( constFn ($display ( "<%0t> ", $time, msg
-                            , " - Source drop method called - "
-                            , fshow (src.peek)))
-        , src );
 
-function Sink #(t) debugSink (Sink #(t) snk, Fmt msg) provisos (FShow #(t));
+function Source #(t) conditionalDebugSource (Bool p, Source #(t) src, Fmt msg)
+  provisos (FShow #(t));
   function f (x) = action
-    $display("<%0t> ", $time, msg, " - Sink put method called - ", fshow (x));
+    if (p) $display ( "<%0t> ", $time, msg
+                    , " - Source drop method called - ", fshow (x) );
+  endaction;
+  return onDrop (f, src);
+endfunction
+
+function Source #(t) debugSource (Source #(t) src, Fmt msg)
+  provisos (FShow #(t)) = conditionalDebugSource (True, src, msg);
+
+function Sink #(t) conditionalDebugSink (Bool p, Sink #(t) snk, Fmt msg)
+  provisos (FShow #(t));
+  function f (x) = action
+    if (p) $display ( "<%0t> ", $time, msg
+                    , " - Sink put method called - ", fshow (x));
   endaction;
   return onPut (f, snk);
 endfunction
+
+function Sink #(t) debugSink (Sink #(t) snk, Fmt msg) provisos (FShow #(t)) =
+  conditionalDebugSink (True, snk, msg);
 
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
