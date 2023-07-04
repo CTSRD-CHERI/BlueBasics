@@ -565,15 +565,30 @@ module toUnguardedSource #(src_t s, t dflt) (Source #(t))
   let canPeekWire <- mkDWire (False);
   let peekWire <- mkDWire (dflt);
   let dropWire <- mkPulseWire;
+  let dropDoneWire <- mkPulseWire;
+  (* fire_when_enabled *)
   rule setCanPeek; canPeekWire <= src.canPeek; endrule
+  (* fire_when_enabled *)
   rule setPeek; peekWire <= src.peek; endrule
+  (* fire_when_enabled, no_implicit_conditions *)
   rule warnDoDrop (dropWire && !canPeekWire);
-    $display("WARNING: %m - dropping from Source that can't be dropped from");
+    $display ( "WARNING: %m.toUnguardedSource - "
+             , "dropping from Source that can't be dropped from" );
+    dropDoneWire.send;
     //$finish (0);
   endrule
+  (* fire_when_enabled *)
   rule doDrop (dropWire && canPeekWire);
-    //$display ("ALLGOOD: dropping from Source");
+    //$display ( "ALLGOOD: %m.toUnguardedSource - "
+    //         , "dropping from Source - ", fshow (pack (peekWire)) );
     src.drop;
+    dropDoneWire.send;
+  endrule
+  (* fire_when_enabled, no_implicit_conditions *)
+  rule warnInconsistent (dropWire && !dropDoneWire);
+    $display ( "ERROR: %m.toUnguardedSource - "
+             , "src.drop implicit condition inconsistent with src.canPeek" );
+    $finish (0);
   endrule
   return interface Source;
     method canPeek = canPeekWire;
@@ -588,14 +603,27 @@ module toUnguardedSink #(snk_t s) (Sink #(t))
   let snk = toSink (s);
   let canPutWire <- mkDWire (False);
   let putWire <- mkRWire;
+  let putDoneWire <- mkPulseWire;
+  (* fire_when_enabled *)
   rule setCanPut; canPutWire <= snk.canPut; endrule
-  rule warnDoPut (isValid (putWire.wget) && !snk.canPut);
-    $display ("WARNING: %m - putting into a Sink that can't be put into");
+  (* fire_when_enabled, no_implicit_conditions *)
+  rule warnDoPut (isValid (putWire.wget) && !canPutWire);
+    $display ( "WARNING: %m.toUnguardedSink - "
+             , "putting into a Sink that can't be put into" );
+    putDoneWire.send;
     //$finish (0);
   endrule
-  rule doPut (isValid (putWire.wget));
-    //$display ("ALLGOOD: putting in a Sink");
+  (* fire_when_enabled *)
+  rule doPut (isValid (putWire.wget) && canPutWire);
+    //$display ("ALLGOOD: %m.toUnguardedSink - putting in a Sink");
     snk.put (putWire.wget.Valid);
+    putDoneWire.send;
+  endrule
+  (* fire_when_enabled, no_implicit_conditions *)
+  rule warnInconsistent (isValid (putWire.wget) && !putDoneWire);
+    $display ( "ERROR: %m.toUnguardedSink - "
+             , "snk.put implicit condition inconsistent with snk.canPut" );
+    $finish (0);
   endrule
   return interface Sink;
     method canPut = canPutWire;
