@@ -138,17 +138,27 @@ endinstance
 // simple debug utilities using the underlying 'debugSource' and 'debugSink'
 // functions which print provided messages on source drop / sink put
 
-function Master #(t_req, t_rsp) debugMaster (Master #(t_req, t_rsp) m, Fmt msg)
+function Master #(t_req, t_rsp) conditionalDebugMaster
+  (Bool p, Master #(t_req, t_rsp) m, Fmt msg)
   provisos (FShow #(t_req), FShow #(t_rsp)) = interface Master;
-    interface req = debugSource (m.req, msg);
-    interface rsp = debugSink   (m.rsp, msg);
+    interface req = conditionalDebugSource (p, m.req, msg);
+    interface rsp = conditionalDebugSink   (p, m.rsp, msg);
+  endinterface;
+
+function Master #(t_req, t_rsp) debugMaster (Master #(t_req, t_rsp) m, Fmt msg)
+  provisos (FShow #(t_req), FShow #(t_rsp)) =
+  conditionalDebugMaster (True, m, msg);
+
+function Slave #(t_req, t_rsp) conditionalDebugSlave
+  (Bool p, Slave #(t_req, t_rsp) s, Fmt msg)
+  provisos (FShow #(t_req), FShow #(t_rsp)) = interface Slave;
+    interface req = conditionalDebugSink   (p, s.req, msg);
+    interface rsp = conditionalDebugSource (p, s.rsp, msg);
   endinterface;
 
 function Slave #(t_req, t_rsp) debugSlave (Slave #(t_req, t_rsp) s, Fmt msg)
-  provisos (FShow #(t_req), FShow #(t_rsp)) = interface Slave;
-    interface req = debugSink   (s.req, msg);
-    interface rsp = debugSource (s.rsp, msg);
-  endinterface;
+  provisos (FShow #(t_req), FShow #(t_rsp)) =
+  conditionalDebugSlave (True, s, msg);
 
 ///////////
 // Utils //
