@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2018-2022 Alexandre Joannou
+ * Copyright (c) 2018-2023 Alexandre Joannou
  * Copyright (c) 2019 Peter Rugg
  * Copyright (c) 2019 Jonathan Woodruff
  * All rights reserved.
@@ -39,6 +39,8 @@ package SourceSink;
 
 import Vector :: *;
 import FIFOF :: *;
+import FIFOLevel::*;
+import Clocks :: *;
 import Probe :: *;
 import SpecialFIFOs :: *;
 import GetPut :: *;
@@ -54,14 +56,32 @@ interface Source #(type t);
   method Action drop;
 endinterface
 
+(* always_ready, always_enabled *)
+interface Source_Sig #(type t);
+  method Bool sourceValid;
+  method t data;
+  (* prefix="" *) method Action produce (Bool sinkReady);
+endinterface
+
 interface Sink #(type t);
   (* always_ready *) method Bool canPut;
   method Action put (t val);
 endinterface
 
+(* always_ready, always_enabled *)
+interface Sink_Sig #(type t);
+  method Bool sinkReady;
+  (* prefix="" *) method Action consume (Bool sourceValid, t data);
+endinterface
+
 interface SourceSinkShim #(type t);
   interface Source #(t) source;
   interface Sink   #(t) sink;
+endinterface
+
+interface SourceSinkShim_Sig #(type t);
+  interface Source_Sig #(t) source;
+  interface Sink_Sig   #(t) sink;
 endinterface
 
 //////////////////////
@@ -102,6 +122,46 @@ instance ToSource #(FIFOF #(t), t);
   endinterface;
 endinstance
 
+instance ToSource #(SyncFIFOIfc #(t), t);
+  function toSource (ff) = interface Source #(t);
+    method canPeek = ff.notEmpty;
+    method peek    = ff.first;
+    method drop    = ff.deq;
+  endinterface;
+endinstance
+
+instance ToSource #(FIFOLevelIfc #(t, _), t);
+  function toSource (ff) = interface Source #(t);
+    method canPeek = ff.notEmpty;
+    method peek    = ff.first;
+    method drop    = ff.deq;
+  endinterface;
+endinstance
+
+instance ToSource #(SyncFIFOLevelIfc #(t, _), t);
+  function toSource (ff) = interface Source #(t);
+    method canPeek = ff.dNotEmpty;
+    method peek    = ff.first;
+    method drop    = ff.deq;
+  endinterface;
+endinstance
+
+instance ToSource #(FIFOCountIfc #(t, _), t);
+  function toSource (ff) = interface Source #(t);
+    method canPeek = ff.notEmpty;
+    method peek    = ff.first;
+    method drop    = ff.deq;
+  endinterface;
+endinstance
+
+instance ToSource #(SyncFIFOCountIfc #(t, _), t);
+  function toSource (ff) = interface Source #(t);
+    method canPeek = ff.dNotEmpty;
+    method peek    = ff.first;
+    method drop    = ff.deq;
+  endinterface;
+endinstance
+
 /*
 instance ToSource #(RWire #(t), t);
   function toSource (w) = interface Source #(t);
@@ -128,6 +188,14 @@ instance ToSource #(PulseWire, Bit #(0));
 endinstance
 */
 
+module toSource_Sig #(src_t src) (Source_Sig #(t))
+  provisos (ToSource #(src_t, t), Bits #(t, _));
+  let s <- toUnguardedSource (src, ?);
+  method sourceValid = s.canPeek;
+  method data = s.peek;
+  method produce (snkRdy) = action if (snkRdy && s.canPeek) s.drop; endaction;
+endmodule
+
 // ToSink
 
 typeclass ToSink #(type a, type b) dependencies (a determines b);
@@ -145,6 +213,41 @@ endinstance
 instance ToSink #(FIFOF #(t), t);
   function toSink (ff) = interface Sink;
     method canPut = ff.notFull;
+    method put    = ff.enq;
+  endinterface;
+endinstance
+
+instance ToSink #(SyncFIFOIfc #(t), t);
+  function toSink (ff) = interface Sink;
+    method canPut = ff.notFull;
+    method put    = ff.enq;
+  endinterface;
+endinstance
+
+instance ToSink #(FIFOLevelIfc #(t, _), t);
+  function toSink (ff) = interface Sink;
+    method canPut = ff.notFull;
+    method put    = ff.enq;
+  endinterface;
+endinstance
+
+instance ToSink #(SyncFIFOLevelIfc #(t, _), t);
+  function toSink (ff) = interface Sink;
+    method canPut = ff.sNotFull;
+    method put    = ff.enq;
+  endinterface;
+endinstance
+
+instance ToSink #(FIFOCountIfc #(t, _), t);
+  function toSink (ff) = interface Sink;
+    method canPut = ff.notFull;
+    method put    = ff.enq;
+  endinterface;
+endinstance
+
+instance ToSink #(SyncFIFOCountIfc #(t, _), t);
+  function toSink (ff) = interface Sink;
+    method canPut = ff.sNotFull;
     method put    = ff.enq;
   endinterface;
 endinstance
@@ -172,6 +275,15 @@ instance ToSink #(PulseWire, Bool);
 endinstance
 */
 
+module toSink_Sig #(snk_t snk) (Sink_Sig #(t))
+  provisos (ToSink #(snk_t, t), Bits #(t, _));
+  let s <- toUnguardedSink (snk);
+  method sinkReady = s.canPut;
+  method consume (srcVld, data) = action
+    if (srcVld && s.canPut) s.put (data);
+  endaction;
+endmodule
+
 // ToSourceSinkShim
 
 typeclass ToSourceSinkShim #(type a, type b) dependencies (a determines b);
@@ -184,6 +296,15 @@ instance ToSourceSinkShim #(a, b) provisos ( ToSource #(a, b), ToSink #(a, b));
     interface   sink =   toSink (x);
   endinterface;
 endinstance
+
+module toSourceSinkShim_Sig #(src_snk_t s) (SourceSinkShim_Sig #(t))
+  provisos (ToSourceSinkShim #(src_snk_t, t), Bits #(t, _));
+  let shim = toSourceSinkShim (s);
+  let src <- toSource_Sig (shim.source);
+  let snk <-   toSink_Sig (shim.sink);
+  interface source = src;
+  interface sink = snk;
+endmodule
 
 // Common Source / Sink constructors
 ////////////////////////////////////////////////////////////////////////////////
@@ -389,6 +510,50 @@ instance Connectable #(Get #(t), Sink #(t));
 endinstance
 */
 
+instance Connectable #(Source_Sig #(t), Sink_Sig #(t))
+  provisos (Bits #(t, t_sz));
+  module mkConnection #(Source_Sig #(t) src, Sink_Sig #(t) snk) (Empty);
+    (* fire_when_enabled, no_implicit_conditions *)
+    rule connect;
+      snk.consume (src.sourceValid, src.data);
+      src.produce (snk.sinkReady);
+    endrule
+  endmodule
+endinstance
+
+instance Connectable #(Sink_Sig #(t), Source_Sig #(t))
+  provisos (Bits #(t, t_sz));
+  module mkConnection #(Sink_Sig #(t) snk, Source_Sig #(t) src) (Empty);
+    mkConnection (src, snk);
+  endmodule
+endinstance
+
+instance Connectable #(Source_Sig #(t), Sink #(t)) provisos (Bits #(t, t_sz));
+  module mkConnection #(Source_Sig #(t) srcSig, Sink #(t) snk) (Empty);
+    let snkSig <- toSink_Sig (snk);
+    mkConnection (srcSig, snkSig);
+  endmodule
+endinstance
+
+instance Connectable #(Sink #(t), Source_Sig #(t)) provisos (Bits #(t, t_sz));
+  module mkConnection #(Sink #(t) snk, Source_Sig #(t) srcSig) (Empty);
+    mkConnection (srcSig, snk);
+  endmodule
+endinstance
+
+instance Connectable #(Source #(t), Sink_Sig #(t)) provisos (Bits #(t, t_sz));
+  module mkConnection #(Source #(t) src, Sink_Sig #(t) snkSig) (Empty);
+    let srcSig <- toSource_Sig (src);
+    mkConnection (srcSig, snkSig);
+  endmodule
+endinstance
+
+instance Connectable #(Sink_Sig #(t), Source #(t)) provisos (Bits #(t, t_sz));
+  module mkConnection #(Sink_Sig #(t) snkSig, Source #(t) src) (Empty);
+    mkConnection (src, snkSig);
+  endmodule
+endinstance
+
 ////////////////////////////////////
 // toUnguardedSource/Sink modules //
 ////////////////////////////////////////////////////////////////////////////////
@@ -400,15 +565,30 @@ module toUnguardedSource #(src_t s, t dflt) (Source #(t))
   let canPeekWire <- mkDWire (False);
   let peekWire <- mkDWire (dflt);
   let dropWire <- mkPulseWire;
+  let dropDoneWire <- mkPulseWire;
+  (* fire_when_enabled *)
   rule setCanPeek; canPeekWire <= src.canPeek; endrule
+  (* fire_when_enabled *)
   rule setPeek; peekWire <= src.peek; endrule
+  (* fire_when_enabled, no_implicit_conditions *)
   rule warnDoDrop (dropWire && !canPeekWire);
-    $display("WARNING: %m - dropping from Source that can't be dropped from");
+    $display ( "WARNING: %m.toUnguardedSource - "
+             , "dropping from Source that can't be dropped from" );
+    dropDoneWire.send;
     //$finish (0);
   endrule
+  (* fire_when_enabled *)
   rule doDrop (dropWire && canPeekWire);
-    //$display ("ALLGOOD: dropping from Source");
+    //$display ( "ALLGOOD: %m.toUnguardedSource - "
+    //         , "dropping from Source - ", fshow (pack (peekWire)) );
     src.drop;
+    dropDoneWire.send;
+  endrule
+  (* fire_when_enabled, no_implicit_conditions *)
+  rule warnInconsistent (dropWire && !dropDoneWire);
+    $display ( "ERROR: %m.toUnguardedSource - "
+             , "src.drop implicit condition inconsistent with src.canPeek" );
+    $finish (0);
   endrule
   return interface Source;
     method canPeek = canPeekWire;
@@ -423,14 +603,27 @@ module toUnguardedSink #(snk_t s) (Sink #(t))
   let snk = toSink (s);
   let canPutWire <- mkDWire (False);
   let putWire <- mkRWire;
+  let putDoneWire <- mkPulseWire;
+  (* fire_when_enabled *)
   rule setCanPut; canPutWire <= snk.canPut; endrule
-  rule warnDoPut (isValid (putWire.wget) && !snk.canPut);
-    $display ("WARNING: %m - putting into a Sink that can't be put into");
+  (* fire_when_enabled, no_implicit_conditions *)
+  rule warnDoPut (isValid (putWire.wget) && !canPutWire);
+    $display ( "WARNING: %m.toUnguardedSink - "
+             , "putting into a Sink that can't be put into" );
+    putDoneWire.send;
     //$finish (0);
   endrule
-  rule doPut (isValid (putWire.wget));
-    //$display ("ALLGOOD: putting in a Sink");
+  (* fire_when_enabled *)
+  rule doPut (isValid (putWire.wget) && canPutWire);
+    //$display ("ALLGOOD: %m.toUnguardedSink - putting in a Sink");
     snk.put (putWire.wget.Valid);
+    putDoneWire.send;
+  endrule
+  (* fire_when_enabled, no_implicit_conditions *)
+  rule warnInconsistent (isValid (putWire.wget) && !putDoneWire);
+    $display ( "ERROR: %m.toUnguardedSink - "
+             , "snk.put implicit condition inconsistent with snk.canPut" );
+    $finish (0);
   endrule
   return interface Sink;
     method canPut = canPutWire;
@@ -560,19 +753,126 @@ endmodule
 
 // debug wrapping
 ////////////////////////////////////////////////////////////////////////////////
-function Source #(t) debugSource (Source #(t) src, Fmt msg)
-  provisos (FShow #(t)) =
-  onDrop( constFn ($display ( "<%0t> ", $time, msg
-                            , " - Source drop method called - "
-                            , fshow (src.peek)))
-        , src );
 
-function Sink #(t) debugSink (Sink #(t) snk, Fmt msg) provisos (FShow #(t));
+function Source #(t) conditionalDebugSource (Bool p, Source #(t) src, Fmt msg)
+  provisos (FShow #(t));
   function f (x) = action
-    $display("<%0t> ", $time, msg, " - Sink put method called - ", fshow (x));
+    if (p) $display ( "<%0t> ", $time, msg
+                    , " - Source drop method called - ", fshow (x) );
+  endaction;
+  return onDrop (f, src);
+endfunction
+
+function Source #(t) debugSource (Source #(t) src, Fmt msg)
+  provisos (FShow #(t)) = conditionalDebugSource (True, src, msg);
+
+function Sink #(t) conditionalDebugSink (Bool p, Sink #(t) snk, Fmt msg)
+  provisos (FShow #(t));
+  function f (x) = action
+    if (p) $display ( "<%0t> ", $time, msg
+                    , " - Sink put method called - ", fshow (x));
   endaction;
   return onPut (f, snk);
 endfunction
+
+function Sink #(t) debugSink (Sink #(t) snk, Fmt msg) provisos (FShow #(t)) =
+  conditionalDebugSink (True, snk, msg);
+
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+// narrow / widen Bit sources and sinks
+// (turn one big flit into a series of smaller ones)
+
+module toNarrowBitSource #(t_src wideSrc) (Source #(Bit #(narrowN)))
+  provisos ( Alias #(t_vec, Vector #(n, Bit #(narrowN)))
+           , ToSource #(t_src, t_in)
+           , Bits #(t_in, wideN)
+           , Bits #(t_vec, wideN)
+           );
+  let src = toSource (wideSrc);
+  let cnt <- mkCReg (2, Invalid);
+  Reg #(t_vec) shiftReg[2] <- mkCRegU (2);
+  rule consumeFromOriginalSource (! isValid (cnt[0]) && src.canPeek);
+    shiftReg[0] <= unpack (pack (src.peek));
+    src.drop;
+    cnt[0] <= Valid (0);
+  endrule
+  method canPeek = isValid (cnt[1]);
+  method peek if (isValid (cnt[1])) = pack (shiftReg[1][0]);
+  method drop if (isValid (cnt[1])) = action
+    shiftReg[1] <= shiftOutFrom0 (?, shiftReg[1], 1);
+    let cntVal = cnt[1].Valid;
+    cnt[1] <= (cntVal == fromInteger (valueOf(n)-1)) ? Invalid
+                                                     : Valid (cntVal + 1);
+  endaction;
+endmodule
+
+module toWideBitSource #(t_src narrowSrc) (Source #(Bit #(wideN)))
+  provisos ( Alias #(t_vec, Vector #(n, Bit #(narrowN)))
+           , ToSource #(t_src, t_in)
+           , Bits #(t_in, narrowN)
+           , Bits #(t_vec, wideN)
+           );
+  let src = toSource (narrowSrc);
+  let cnt <- mkCReg (2, Valid (0));
+  Reg #(t_vec) shiftReg[2] <- mkCRegU (2);
+  rule consumeFromOriginalSource (isValid (cnt[0]) && src.canPeek);
+    shiftReg[0] <= shiftInAtN (shiftReg[0], pack (src.peek));
+    src.drop;
+    let cntVal = cnt[0].Valid;
+    cnt[0] <= (cntVal == fromInteger (valueOf(n)-1)) ? Invalid
+                                                     : Valid (cntVal + 1);
+  endrule
+  method canPeek = ! isValid (cnt[1]);
+  method peek if (! isValid (cnt[1])) = pack (shiftReg[1]);
+  method drop if (! isValid (cnt[1])) = writeReg (cnt[1], Valid (0));
+endmodule
+
+module toNarrowBitSink #(t_snk wideSnk) (Sink #(Bit #(narrowN)))
+  provisos ( Alias #(t_vec, Vector #(n, Bit #(narrowN)))
+           , ToSink #(t_snk, t_out)
+           , Bits #(t_out, wideN)
+           , Bits #(t_vec, wideN)
+           );
+  let snk = toSink (wideSnk);
+  let cnt <- mkCReg (2, Valid (0));
+  Reg #(t_vec) shiftReg[2] <- mkCRegU (2);
+  rule produceToOriginalSink (! isValid (cnt[1]) && snk.canPut);
+    snk.put (unpack (pack (shiftReg[1])));
+    cnt[1] <= Valid (0);
+  endrule
+  method canPut = isValid (cnt[0]);
+  method put (x) if (isValid (cnt[0])) = action
+    shiftReg[0] <= shiftInAtN (shiftReg[0], x);
+    let cntVal = cnt[0].Valid;
+    cnt[0] <= (cntVal == fromInteger (valueOf(n)-1)) ? Invalid
+                                                     : Valid (cntVal + 1);
+  endaction;
+endmodule
+
+module toWideBitSink #(t_snk narrowSnk) (Sink #(Bit #(wideN)))
+  provisos ( Alias #(t_vec, Vector #(n, Bit #(narrowN)))
+           , ToSink #(t_snk, t_out)
+           , Bits #(t_out, narrowN)
+           , Bits #(t_vec, wideN)
+           );
+  let snk = toSink (narrowSnk);
+  let cnt <- mkCReg (2, Invalid);
+  Reg #(t_vec) shiftReg[2] <- mkCRegU (2);
+  rule produceToOriginalSink (isValid (cnt[1]) && snk.canPut);
+    snk.put (unpack (shiftReg[1][0]));
+    shiftReg[1] <= shiftOutFrom0 (?, shiftReg[1], 1);
+    let cntVal = cnt[1].Valid;
+    cnt[1] <= (cntVal == fromInteger (valueOf(n)-1)) ? Invalid
+                                                     : Valid (cntVal + 1);
+  endrule
+  method canPut = ! isValid (cnt[0]);
+  method put (x) if (! isValid (cnt[0])) = action
+    shiftReg[0] <= unpack (pack (x));
+    cnt[0] <= Valid (0);
+  endaction;
+endmodule
 
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
