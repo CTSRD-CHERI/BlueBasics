@@ -61,6 +61,18 @@ endmodule
 function t mergeWithMask (t mask, t x0, t x1) provisos (Bits #(t, t_sz)) =
   unpack ((pack (x0) & ~pack (mask)) | (pack (x1) & pack (mask)));
 
+// derive a bitmask from a byte enable
+////////////////////////////////////////////////////////////////////////////////
+
+function mask_t beToMask (be_t be)
+  provisos ( Bits #(mask_t, mask_sz)
+           , Bits #(be_t, be_sz)
+           , Mul #(be_sz, 8, mask_sz) );
+  Vector #(be_sz, Bit #(1)) beVec = unpack (pack (be));
+  Vector #(be_sz, Bit #(8)) maskVec = map (signExtend, beVec);
+  return unpack (pack (maskVec));
+endfunction
+
 // merge two data chunks with byte enable
 ////////////////////////////////////////////////////////////////////////////////
 
