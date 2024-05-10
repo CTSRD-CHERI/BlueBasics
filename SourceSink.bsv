@@ -710,6 +710,30 @@ endmodule
 // Shims //
 ////////////////////////////////////////////////////////////////////////////////
 
+module mkCombSourceSinkShim (SourceSinkShim #(t)) provisos (Bits #(t, _));
+  RWire #(t) data <- mkRWire;
+  PulseWire doDrop <- mkPulseWire;
+  (* fire_when_enabled, no_implicit_conditions *)
+  rule warn_no_drop (isValid (data.wget) && !doDrop);
+    $display ( "WARNING: %m.mkCombSourceSinkShim - "
+             , "produced value but didn't consume it"
+             //, ": ", fshow (data.wget.Valid)
+             );
+    //$finish (0);
+  endrule
+  return interface SourceSinkShim;
+    interface source = interface Source;
+      method canPeek = isValid (data.wget);
+      method peek = data.wget.Valid;
+      method drop = doDrop.send;
+    endinterface;
+    interface sink = interface Sink;
+      method canPut = True;
+      method put = data.wset;
+    endinterface;
+  endinterface;
+endmodule
+
 module mkSourceSinkShimWith #(function module #(FIFOF #(t)) mkFF ())
   (SourceSinkShim #(t));
   let shim <- fmap (toSourceSinkShim, mkFF);
