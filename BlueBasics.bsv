@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2018-2022 Alexandre Joannou
+ * Copyright (c) 2018-2024 Alexandre Joannou
  * All rights reserved.
  *
  * This software was developed by SRI International and the University of
@@ -30,6 +30,7 @@ package BlueBasics;
 
 import Monoid :: *;
 import ListExtra :: *;
+import VectorExtra :: *;
 import Dict :: *;
 import Virtualizable :: *;
 import SourceSink :: *;
@@ -42,6 +43,7 @@ import SignalProbe :: *;
 
 export Monoid :: *;
 export ListExtra :: *;
+export VectorExtra :: *;
 export Dict :: *;
 export Virtualizable :: *;
 export SourceSink :: *;

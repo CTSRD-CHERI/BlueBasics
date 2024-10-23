@@ -1,0 +1,52 @@
+-- Copyright (c) 2024 Alexandre Joannou
+-- All rights reserved.
+--
+-- @BERI_LICENSE_HEADER_START@
+--
+-- Licensed to BERI Open Systems C.I.C. (BERI) under one or more contributor
+-- license agreements.  See the NOTICE file distributed with this work for
+-- additional information regarding copyright ownership.  BERI licenses this
+-- file to you under the BERI Hardware-Software License, Version 1.0 (the
+-- "License"); you may not use this file except in compliance with the
+-- License.  You may obtain a copy of the License at:
+--
+--   http://www.beri-open-systems.org/legal/license-1-0.txt
+--
+-- Unless required by applicable law or agreed to in writing, Work distributed
+-- under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+-- CONDITIONS OF ANY KIND, either express or implied.  See the License for the
+-- specific language governing permissions and limitations under the License.
+--
+-- @BERI_LICENSE_HEADER_END@
+
+package VectorExtra where
+import Vector
+
+-- Nice friendly vector constructor
+--------------------------------------------------------------------------------
+
+class MkVec r sz e | r -> e sz where
+  mkVec :: Vector sz e -> r
+
+instance MkVec (Vector n e) n e where
+  --mkVec :: Vector n e -> Vector n e
+  mkVec = reverse
+
+instance (MkVec k m e, Add n 1 m) => MkVec (e -> k) n e where
+  --mkVec :: Vector n e -> e -> Vector m e
+  mkVec acc elem = mkVec (cons elem acc)
+
+vector :: (MkVec r 0 _e) => r
+vector = mkVec nil
+
+--------------------------------------------------------------------------------
+
+-- example use
+
+top :: Module Empty
+top = module
+  let myVec :: Vector 5 (Bit 32) = vector 1 2 3 4 5
+  rules
+    when True ==> action
+      $display (fshow myVec)
+      $finish
