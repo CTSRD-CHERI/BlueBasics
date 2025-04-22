@@ -155,6 +155,74 @@ endtypeclass
 == link:Interconnect.bsv[Interconnect]
 
 === link:Routable.bsv[Routable]
-=== link:OneHotArbiter.bsv[OneHotArbiter]
+
+The `Routable` class provides methods to help routing a flit type through some interconnect logic. The `routingField` method extracts a field of the flit to be used as an argument to a separate routing function. Additionally, the `isLast` method identifies a flit as the last of a (possibly multi-flit) packet. It is useful to help keep track of state needed for packet switching logic.
+
+[source,bsv]
+--------
+typeclass Has_routingField #(type t, type r_t) dependencies (t determines r_t);
+  function r_t routingField (t x);
+endtypeclass
+
+typeclass Has_isLast #(type t);
+  function Bool isLast (t x);
+endtypeclass
+
+typeclass Routable #(type f_t, type r_t)
+  provisos ( Has_routingField #(f_t, r_t)
+           , Has_isLast #(f_t))
+  dependencies (f_t determines r_t);
+endtypeclass
+
+instance Routable #(a, b) provisos (Has_routingField #(a, b), Has_isLast #(a));
+endinstance
+--------
+
 === link:OneWayBus.bsv[OneWayBus]
+
+The `mkOneWayBus` module connects `Routable` flit `Source`s to flit `Sink`s, according to a provided routing function. The `Routable` constraint on the flits type means that a routing field can be extracted from a flit incomming from a `Source` and passed as an argument to the routing function which is then in charge of identifying the appropriate destination `Sink`.
+
+[source,bsv]
+--------
+module mkOneWayBus #(
+  function Vector #(nO, Bool) route (r_t x) // the routing function to use
+, Vector #(nI, in_t)  ins                   // the inputs
+, Vector #(nO, out_t) outs                  // the outputs
+) (Empty) provisos (
+  ToSource #(in_t,  flit_t)
+, ToSink   #(out_t, flit_t)
+, Routable #(flit_t, r_t)
+, Bits #(flit_t, flit_sz)
+  // assertion on argument sizes
+, Add #(1, a__, nI) // at least one input is needed
+, Add #(1, b__, nO) // at least one output is needed
+);
+--------
+
 === link:TwoWayBus.bsv[TwoWayBus]
+
+The `mkTwoWayBus` module instanciates one-way buses separately to route request flits from masters to slaves and to route response flits from salves to masters. The `Routable` instance of the request flit type typically uses a memory address as a routing field, and the `Routable` instance of the response flit type will generally use a master identifier (often implicitly appended to the request flit out of the master by the interconnect substrate, and mirrored back in the response flit by the slave).
+
+[source,bsv]
+--------
+module mkTwoWayBus #(
+  function Vector #(nSlvs, Bool)  routeUp    (r_up_t x)
+, function Vector #(nMsts, Bool)  routeDown  (r_down_t x)
+, slave_t                         noRouteSlv
+, function module #(inner_master) wrapMaster (master_t m, Integer idx)
+, function module #(inner_slave)  wrapSlave  (slave_t s)
+, Vector #(nMsts, master_t)       ms
+, Vector #(nSlvs,  slave_t)       ss
+) (Empty) provisos (
+  Alias #(master_t,     Master #(req_t,     rsp_t))
+, Alias #(inner_master, Master #(inner_req, inner_rsp))
+, Alias #(inner_slave,  Slave  #(inner_req, inner_rsp))
+, Alias #(slave_t,      Slave  #(req_fat_t, rsp_fat_t))
+, Bits #(inner_req, inner_req_sz), Bits #(inner_rsp, inner_rsp_sz)
+, Routable #(inner_req, r_up_t)
+, Routable #(inner_rsp, r_down_t)
+  // assertion on argument sizes
+, Add #(1, _a, nMsts) // at least one Master is needed
+, Add #(1, _b, nSlvs) // at least one slave is needed
+);
+--------
